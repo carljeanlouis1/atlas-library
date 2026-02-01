@@ -2,6 +2,14 @@ import { useEffect, useState, useRef } from 'react'
 import { useParams } from 'react-router-dom'
 import { Headphones, MessageCircle, Share, Bookmark, Loader2, SkipBack, SkipForward, Play, Pause, Volume2 } from 'lucide-react'
 import ReactMarkdown from 'react-markdown'
+import ChatPanel from '../components/ChatPanel'
+
+interface ChatMessage {
+  id: string
+  role: 'user' | 'assistant'
+  message: string
+  created_at?: string
+}
 
 interface ContentItem {
   id: string
@@ -11,6 +19,7 @@ interface ContentItem {
   audio_url?: string
   metadata?: Record<string, unknown>
   tags?: string[]
+  chat?: ChatMessage[]
   created_at: string
 }
 
@@ -20,6 +29,7 @@ export default function Reader() {
   const [loading, setLoading] = useState(true)
   const [generating, setGenerating] = useState(false)
   const [audioUrl, setAudioUrl] = useState<string | null>(null)
+  const [showChat, setShowChat] = useState(false)
   
   // Audio player state
   const audioRef = useRef<HTMLAudioElement>(null)
@@ -234,7 +244,10 @@ export default function Reader() {
             Audio generated!
           </span>
         )}
-        <button className="flex items-center gap-2 px-4 py-2 bg-surface hover:bg-surface-hover border border-border rounded-lg transition-colors">
+        <button 
+          onClick={() => setShowChat(true)}
+          className="flex items-center gap-2 px-4 py-2 bg-surface hover:bg-surface-hover border border-border rounded-lg transition-colors"
+        >
           <MessageCircle className="w-4 h-4" />
           Discuss
         </button>
@@ -250,6 +263,16 @@ export default function Reader() {
       <article className="prose-reading prose prose-invert max-w-none">
         <ReactMarkdown>{content.content || ''}</ReactMarkdown>
       </article>
+
+      {/* Chat Panel */}
+      {showChat && (
+        <ChatPanel
+          contentId={content.id}
+          contentTitle={content.title}
+          onClose={() => setShowChat(false)}
+          initialMessages={content.chat || []}
+        />
+      )}
     </div>
   )
 }
