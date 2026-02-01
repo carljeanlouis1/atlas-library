@@ -11,13 +11,14 @@
     "dev:cf": "wrangler pages dev --compatibility-date=2024-01-01 -- npm run dev"
   },
   "dependencies": {
+    "@tailwindcss/typography": "^0.5.19",
+    "date-fns": "^3.3.0",
+    "framer-motion": "^11.0.0",
+    "lucide-react": "^0.300.0",
     "react": "^18.3.1",
     "react-dom": "^18.3.1",
     "react-router-dom": "^6.22.0",
-    "zustand": "^4.5.0",
-    "framer-motion": "^11.0.0",
-    "date-fns": "^3.3.0",
-    "lucide-react": "^0.300.0"
+    "zustand": "^4.5.0"
   },
   "devDependencies": {
     "@types/react": "^18.3.1",

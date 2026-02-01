@@ -9,7 +9,7 @@ ENVIRONMENT = "production"
 [[d1_databases]]
 binding = "DB"
 database_name = "atlas-library-db"
-database_id = "TO_BE_CREATED"
+database_id = "b3391398-12c2-4b29-b719-0a055c5df892"
 
 # Note: Add your API keys as secrets using:
 # npx wrangler secret put ATLAS_API_KEY
