@@ -1,42 +1,54 @@
-import { BookOpen, Headphones, FileText, Gavel } from 'lucide-react'
+import { useEffect, useState } from 'react'
+import { Link } from 'react-router-dom'
+import { BookOpen, Headphones, FileText, Gavel, Loader2 } from 'lucide-react'
 
-const contentTypes = [
-  { type: 'text', icon: BookOpen, label: 'Stories & Analyses', count: 3 },
-  { type: 'audio', icon: Headphones, label: 'Audio Notes', count: 5 },
-  { type: 'brief', icon: FileText, label: 'Morning Briefs', count: 12 },
-  { type: 'debate', icon: Gavel, label: 'Tribunal Debates', count: 2 },
-]
+interface ContentItem {
+  id: string
+  type: 'text' | 'audio' | 'debate' | 'brief'
+  title: string
+  content?: string
+  audio_url?: string
+  metadata?: string
+  created_at: string
+}
 
-const recentContent = [
-  {
-    id: '1',
-    type: 'text',
-    title: 'The Gardener World: A Story from 2041',
-    excerpt: 'Maya Chen hadn\'t worn real clothes in three weeks...',
-    date: '2026-02-01',
-    tags: ['fiction', 'ai', 'future'],
-  },
-  {
-    id: '2',
-    type: 'audio',
-    title: 'The AI Civilization Video: A Deep Dive',
-    excerpt: 'Analysis of AI agents building civilizations in Minecraft...',
-    date: '2026-02-01',
-    tags: ['analysis', 'youtube', 'ai-agents'],
-    hasAudio: true,
-  },
-  {
-    id: '3',
-    type: 'debate',
-    title: 'The AI Acceleration Gap',
-    excerpt: 'Three models debate whether AI adoption gaps will create permanent advantages...',
-    date: '2026-01-31',
-    tags: ['tribunal', 'ai', 'society'],
-    hasAudio: true,
-  },
-]
+const typeIcons = {
+  text: BookOpen,
+  audio: Headphones,
+  brief: FileText,
+  debate: Gavel,
+}
 
 export default function Home() {
+  const [content, setContent] = useState<ContentItem[]>([])
+  const [loading, setLoading] = useState(true)
+  const [counts, setCounts] = useState({ text: 0, audio: 0, brief: 0, debate: 0 })
+
+  useEffect(() => {
+    fetch('/api/content?limit=20')
+      .then(res => res.json())
+      .then(data => {
+        if (data.success) {
+          setContent(data.content)
+          // Count by type
+          const c = { text: 0, audio: 0, brief: 0, debate: 0 }
+          data.content.forEach((item: ContentItem) => {
+            if (c[item.type] !== undefined) c[item.type]++
+          })
+          setCounts(c)
+        }
+        setLoading(false)
+      })
+      .catch(() => setLoading(false))
+  }, [])
+
+  const contentTypes = [
+    { type: 'text' as const, icon: BookOpen, label: 'Stories & Analyses', count: counts.text },
+    { type: 'audio' as const, icon: Headphones, label: 'Audio Notes', count: counts.audio },
+    { type: 'brief' as const, icon: FileText, label: 'Morning Briefs', count: counts.brief },
+    { type: 'debate' as const, icon: Gavel, label: 'Tribunal Debates', count: counts.debate },
+  ]
+
   return (
     <div className="max-w-6xl mx-auto px-4 py-8">
       {/* Welcome */}
@@ -65,36 +77,50 @@ export default function Home() {
       {/* Recent content */}
       <div>
         <h2 className="text-xl font-semibold mb-4">Recent</h2>
-        <div className="space-y-3">
-          {recentContent.map((item) => (
-            <div
-              key={item.id}
-              className="bg-surface border border-border rounded-xl p-5 content-card cursor-pointer"
-            >
-              <div className="flex items-start justify-between gap-4">
-                <div className="flex-1 min-w-0">
-                  <div className="flex items-center gap-2 mb-2">
-                    <span className="text-xs font-medium text-atlas-400 uppercase">{item.type}</span>
-                    {item.hasAudio && (
-                      <span className="flex items-center gap-1 text-xs text-text-muted">
-                        <Headphones className="w-3 h-3" />
-                        Audio
-                      </span>
-                    )}
+        
+        {loading ? (
+          <div className="flex items-center justify-center py-12">
+            <Loader2 className="w-6 h-6 animate-spin text-atlas-400" />
+          </div>
+        ) : content.length === 0 ? (
+          <div className="text-center py-12 text-text-muted">
+            No content yet. Atlas will push content here.
+          </div>
+        ) : (
+          <div className="space-y-3">
+            {content.map((item) => {
+              const Icon = typeIcons[item.type] || BookOpen
+              const date = new Date(item.created_at).toLocaleDateString()
+              return (
+                <Link
+                  key={item.id}
+                  to={`/read/${item.id}`}
+                  className="block bg-surface border border-border rounded-xl p-5 content-card"
+                >
+                  <div className="flex items-start justify-between gap-4">
+                    <div className="flex-1 min-w-0">
+                      <div className="flex items-center gap-2 mb-2">
+                        <Icon className="w-4 h-4 text-atlas-400" />
+                        <span className="text-xs font-medium text-atlas-400 uppercase">{item.type}</span>
+                        {item.audio_url && (
+                          <span className="flex items-center gap-1 text-xs text-text-muted">
+                            <Headphones className="w-3 h-3" />
+                            Audio
+                          </span>
+                        )}
+                      </div>
+                      <h3 className="font-semibold mb-2">{item.title}</h3>
+                      <p className="text-sm text-text-secondary line-clamp-2">
+                        {item.content?.slice(0, 200)}...
+                      </p>
+                    </div>
+                    <div className="text-sm text-text-muted whitespace-nowrap">{date}</div>
                   </div>
-                  <h3 className="font-semibold mb-2 truncate">{item.title}</h3>
-                  <p className="text-sm text-text-secondary line-clamp-2">{item.excerpt}</p>
-                  <div className="flex items-center gap-2 mt-3">
-                    {item.tags.map((tag) => (
-                      <span key={tag} className="tag-pill">{tag}</span>
-                    ))}
-                  </div>
-                </div>
-                <div className="text-sm text-text-muted whitespace-nowrap">{item.date}</div>
-              </div>
-            </div>
-          ))}
-        </div>
+                </Link>
+              )
+            })}
+          </div>
+        )}
       </div>
     </div>
   )
