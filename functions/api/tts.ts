@@ -35,7 +35,7 @@ export const onRequestPost: PagesFunction<Env> = async (context) => {
       body: JSON.stringify({
         title: 'Library TTS',
         text: body.text.slice(0, 50000), // Limit text length
-        voice: body.voice || 'onyx',
+        voice: body.voice || 'nova',
         metadata: {
           source: 'atlas-library',
           contentId: body.contentId,

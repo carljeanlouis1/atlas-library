@@ -4,6 +4,7 @@ import Home from './pages/Home'
 import Reader from './pages/Reader'
 import Audio from './pages/Audio'
 import Timeline from './pages/Timeline'
+import Settings from './pages/Settings'
 
 function App() {
   return (
@@ -13,6 +14,7 @@ function App() {
         <Route path="read/:id" element={<Reader />} />
         <Route path="audio" element={<Audio />} />
         <Route path="timeline" element={<Timeline />} />
+        <Route path="settings" element={<Settings />} />
       </Route>
     </Routes>
   )

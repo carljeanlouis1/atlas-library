@@ -26,25 +26,27 @@ html {
   scroll-behavior: smooth;
 }
 
-/* Reading typography */
+/* Reading typography - comfortable size */
 .prose-reading {
-  @apply font-serif text-lg leading-relaxed;
+  @apply font-serif text-base leading-relaxed;
+  font-size: 1rem;
+  line-height: 1.8;
 }
 
 .prose-reading p {
-  @apply mb-6;
+  @apply mb-5;
 }
 
 .prose-reading h1 {
-  @apply font-sans text-3xl font-bold mb-6 mt-12;
+  @apply font-sans text-2xl font-bold mb-5 mt-10;
 }
 
 .prose-reading h2 {
-  @apply font-sans text-2xl font-semibold mb-4 mt-10;
+  @apply font-sans text-xl font-semibold mb-4 mt-8;
 }
 
 .prose-reading h3 {
-  @apply font-sans text-xl font-medium mb-3 mt-8;
+  @apply font-sans text-lg font-medium mb-3 mt-6;
 }
 
 /* Audio player styling */
@@ -65,4 +67,20 @@ html {
 /* Content card hover */
 .content-card {
   @apply transition-all duration-200 hover:bg-surface-hover hover:border-atlas-700/30;
+}
+
+/* Font size controls */
+.font-size-sm .prose-reading {
+  font-size: 0.875rem;
+  line-height: 1.7;
+}
+
+.font-size-md .prose-reading {
+  font-size: 1rem;
+  line-height: 1.8;
+}
+
+.font-size-lg .prose-reading {
+  font-size: 1.125rem;
+  line-height: 1.9;
 }

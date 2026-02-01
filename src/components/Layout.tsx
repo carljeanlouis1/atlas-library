@@ -1,10 +1,11 @@
 import { Outlet, Link, useLocation } from 'react-router-dom'
-import { BookOpen, Headphones, Clock, Home, Search, MessageCircle } from 'lucide-react'
+import { BookOpen, Headphones, Clock, Home, Search, MessageCircle, Settings } from 'lucide-react'
 
 const navItems = [
   { path: '/', icon: Home, label: 'Library' },
   { path: '/audio', icon: Headphones, label: 'Audio' },
   { path: '/timeline', icon: Clock, label: 'Timeline' },
+  { path: '/settings', icon: Settings, label: 'Settings' },
 ]
 
 export default function Layout() {

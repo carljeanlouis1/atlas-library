@@ -91,13 +91,17 @@ export default function Reader() {
     if (!content?.content) return
     setGenerating(true)
     
+    // Get voice preference from localStorage
+    const selectedVoice = localStorage.getItem('atlas-voice') || 'nova'
+    
     try {
       const response = await fetch('/api/tts', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
           text: content.content,
-          contentId: id
+          contentId: id,
+          voice: selectedVoice
         })
       })
       const data = await response.json()
