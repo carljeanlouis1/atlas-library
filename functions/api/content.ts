@@ -8,6 +8,7 @@ interface ContentRequest {
   title: string;
   content?: string;
   audioUrl?: string;
+  imageUrl?: string;
   metadata?: Record<string, unknown>;
   tags?: string[];
 }
@@ -55,13 +56,14 @@ export const onRequestPost: PagesFunction<Env> = async (context) => {
 
   // Insert content
   await context.env.DB.prepare(
-    'INSERT INTO content (id, type, title, content, audio_url, metadata) VALUES (?, ?, ?, ?, ?, ?)'
+    'INSERT INTO content (id, type, title, content, audio_url, image_url, metadata) VALUES (?, ?, ?, ?, ?, ?, ?)'
   ).bind(
     id,
     body.type,
     body.title,
     body.content || null,
     body.audioUrl || null,
+    body.imageUrl || null,
     body.metadata ? JSON.stringify(body.metadata) : null
   ).run();
 

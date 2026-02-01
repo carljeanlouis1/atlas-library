@@ -8,6 +8,7 @@ interface ContentItem {
   title: string
   content?: string
   audio_url?: string
+  image_url?: string
   metadata?: string
   created_at: string
 }
@@ -95,26 +96,37 @@ export default function Home() {
                 <Link
                   key={item.id}
                   to={`/read/${item.id}`}
-                  className="block bg-surface border border-border rounded-xl p-5 content-card"
+                  className="block bg-surface border border-border rounded-xl overflow-hidden content-card"
                 >
-                  <div className="flex items-start justify-between gap-4">
-                    <div className="flex-1 min-w-0">
-                      <div className="flex items-center gap-2 mb-2">
-                        <Icon className="w-4 h-4 text-atlas-400" />
-                        <span className="text-xs font-medium text-atlas-400 uppercase">{item.type}</span>
-                        {item.audio_url && (
-                          <span className="flex items-center gap-1 text-xs text-text-muted">
-                            <Headphones className="w-3 h-3" />
-                            Audio
-                          </span>
-                        )}
-                      </div>
-                      <h3 className="font-semibold mb-2">{item.title}</h3>
-                      <p className="text-sm text-text-secondary line-clamp-2">
-                        {item.content?.slice(0, 200)}...
-                      </p>
+                  {item.image_url && (
+                    <div className="h-40 w-full overflow-hidden">
+                      <img 
+                        src={item.image_url} 
+                        alt={item.title}
+                        className="w-full h-full object-cover"
+                      />
                     </div>
-                    <div className="text-sm text-text-muted whitespace-nowrap">{date}</div>
+                  )}
+                  <div className="p-5">
+                    <div className="flex items-start justify-between gap-4">
+                      <div className="flex-1 min-w-0">
+                        <div className="flex items-center gap-2 mb-2">
+                          <Icon className="w-4 h-4 text-atlas-400" />
+                          <span className="text-xs font-medium text-atlas-400 uppercase">{item.type}</span>
+                          {item.audio_url && (
+                            <span className="flex items-center gap-1 text-xs text-text-muted">
+                              <Headphones className="w-3 h-3" />
+                              Audio
+                            </span>
+                          )}
+                        </div>
+                        <h3 className="font-semibold mb-2">{item.title}</h3>
+                        <p className="text-sm text-text-secondary line-clamp-2">
+                          {item.content?.slice(0, 200)}...
+                        </p>
+                      </div>
+                      <div className="text-sm text-text-muted whitespace-nowrap">{date}</div>
+                    </div>
                   </div>
                 </Link>
               )

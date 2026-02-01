@@ -6,6 +6,7 @@ CREATE TABLE IF NOT EXISTS content (
   title TEXT NOT NULL,
   content TEXT,
   audio_url TEXT,
+  image_url TEXT,
   metadata TEXT, -- JSON
   created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
   updated_at DATETIME DEFAULT CURRENT_TIMESTAMP

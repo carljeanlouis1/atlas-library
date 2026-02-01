@@ -17,6 +17,7 @@ interface ContentItem {
   title: string
   content?: string
   audio_url?: string
+  image_url?: string
   metadata?: Record<string, unknown>
   tags?: string[]
   chat?: ChatMessage[]
@@ -151,6 +152,17 @@ export default function Reader() {
 
   return (
     <div className="max-w-3xl mx-auto px-4 py-8">
+      {/* Hero Image */}
+      {content.image_url && (
+        <div className="mb-8 -mx-4 md:mx-0 md:rounded-xl overflow-hidden">
+          <img 
+            src={content.image_url} 
+            alt={content.title}
+            className="w-full h-64 md:h-80 object-cover"
+          />
+        </div>
+      )}
+
       {/* Header */}
       <div className="mb-8">
         <div className="flex items-center gap-2 mb-4">
