@@ -11,6 +11,12 @@ binding = "DB"
 database_name = "atlas-library-db"
 database_id = "b3391398-12c2-4b29-b719-0a055c5df892"
 
+# R2 bucket for image storage
+[[r2_buckets]]
+binding = "IMAGES"
+bucket_name = "atlas-library-images"
+
 # Note: Add your API keys as secrets using:
 # npx wrangler secret put ATLAS_API_KEY
 # npx wrangler secret put ANTHROPIC_API_KEY
+# npx wrangler secret put GEMINI_API_KEY
