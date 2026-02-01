@@ -46,7 +46,7 @@ export const onRequestPost: PagesFunction<Env> = async (context) => {
       'anthropic-version': '2023-06-01',
     },
     body: JSON.stringify({
-      model: 'claude-sonnet-4-5-20250514',
+      model: 'claude-sonnet-4-5',
       max_tokens: 2048,
       system: `You are Atlas, Carl's AI assistant. You're discussing the following content with him:
 
