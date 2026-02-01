@@ -114,8 +114,9 @@ function extractThemes(content: string): string {
 }
 
 async function generateWithGemini(apiKey: string, prompt: string): Promise<ArrayBuffer> {
+  // Use Gemini 2.0 Flash experimental image generation model
   const response = await fetch(
-    `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash-exp:generateContent?key=${apiKey}`,
+    `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash-exp-image-generation:generateContent?key=${apiKey}`,
     {
       method: 'POST',
       headers: {
@@ -126,8 +127,7 @@ async function generateWithGemini(apiKey: string, prompt: string): Promise<Array
           parts: [{ text: prompt }]
         }],
         generationConfig: {
-          responseModalities: ['image', 'text'],
-          responseMimeType: 'image/png',
+          responseModalities: ['TEXT', 'IMAGE'],
         }
       }),
     }
@@ -140,17 +140,25 @@ async function generateWithGemini(apiKey: string, prompt: string): Promise<Array
 
   const data = await response.json();
   
-  // Extract image from response
-  const imagePart = data.candidates?.[0]?.content?.parts?.find(
-    (part: { inlineData?: { data: string } }) => part.inlineData?.data
-  );
+  // Extract image from response - check all parts
+  let imageData: string | null = null;
+  const parts = data.candidates?.[0]?.content?.parts || [];
+  
+  for (const part of parts) {
+    if (part.inlineData?.data) {
+      imageData = part.inlineData.data;
+      break;
+    }
+  }
 
-  if (!imagePart?.inlineData?.data) {
-    throw new Error('No image generated');
+  if (!imageData) {
+    // Log what we got for debugging
+    const textParts = parts.filter((p: { text?: string }) => p.text).map((p: { text: string }) => p.text);
+    throw new Error(`No image generated. Model response: ${textParts.join(' ') || 'empty'}`);
   }
 
   // Decode base64 to ArrayBuffer
-  const binaryString = atob(imagePart.inlineData.data);
+  const binaryString = atob(imageData);
   const bytes = new Uint8Array(binaryString.length);
   for (let i = 0; i < binaryString.length; i++) {
     bytes[i] = binaryString.charCodeAt(i);
