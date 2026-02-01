@@ -29,6 +29,19 @@ export const onRequestGet: PagesFunction<Env> = async (context) => {
     'SELECT * FROM chat_messages WHERE content_id = ? ORDER BY created_at ASC'
   ).bind(id).all();
 
+  // Get story pages if content type is 'story'
+  let pages = null;
+  if (content.type === 'story') {
+    const { results: pageResults } = await context.env.DB.prepare(
+      'SELECT * FROM story_pages WHERE content_id = ? ORDER BY page_number ASC'
+    ).bind(id).all();
+    
+    pages = pageResults.map((page: Record<string, unknown>) => ({
+      ...page,
+      narration_segments: page.narration_segments ? JSON.parse(page.narration_segments as string) : null,
+    }));
+  }
+
   return new Response(JSON.stringify({
     success: true,
     content: {
@@ -36,6 +49,7 @@ export const onRequestGet: PagesFunction<Env> = async (context) => {
       metadata: content.metadata ? JSON.parse(content.metadata as string) : null,
       tags: tags.map((t: { name: string }) => t.name),
       chat: messages,
+      pages,
     },
   }), {
     headers: { 'Content-Type': 'application/json' },

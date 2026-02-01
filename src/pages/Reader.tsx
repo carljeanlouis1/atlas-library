@@ -1,6 +1,6 @@
 import { useEffect, useState, useRef } from 'react'
 import { useParams } from 'react-router-dom'
-import { Headphones, MessageCircle, Share, Bookmark, Loader2, SkipBack, SkipForward, Play, Pause, Volume2 } from 'lucide-react'
+import { Headphones, MessageCircle, Share, Bookmark, Loader2, SkipBack, SkipForward, Play, Pause, Volume2, ChevronLeft, ChevronRight } from 'lucide-react'
 import ReactMarkdown from 'react-markdown'
 import ChatPanel from '../components/ChatPanel'
 
@@ -9,6 +9,15 @@ interface ChatMessage {
   role: 'user' | 'assistant'
   message: string
   created_at?: string
+}
+
+interface StoryPage {
+  id: string
+  page_number: number
+  image_url?: string
+  image_base64?: string
+  narration_text?: string
+  narration_segments?: { segment_id: number; narration_text: string }[]
 }
 
 interface ContentItem {
@@ -21,6 +30,7 @@ interface ContentItem {
   metadata?: Record<string, unknown>
   tags?: string[]
   chat?: ChatMessage[]
+  pages?: StoryPage[]
   created_at: string
 }
 
@@ -37,6 +47,9 @@ export default function Reader() {
   const [isPlaying, setIsPlaying] = useState(false)
   const [currentTime, setCurrentTime] = useState(0)
   const [duration, setDuration] = useState(0)
+  
+  // Story viewer state
+  const [currentPage, setCurrentPage] = useState(0)
 
   // Apply font size setting on load
   useEffect(() => {
@@ -278,10 +291,91 @@ export default function Reader() {
         </button>
       </div>
 
-      {/* Content */}
-      <article className="prose-reading prose prose-invert max-w-none" style={{ fontFamily: "'Times New Roman', Times, Georgia, serif" }}>
-        <ReactMarkdown>{content.content || ''}</ReactMarkdown>
-      </article>
+      {/* Content - Story Viewer or Text */}
+      {content.type === 'story' && content.pages && content.pages.length > 0 ? (
+        <div className="story-viewer">
+          {/* Page Display */}
+          <div className="relative bg-surface border border-border rounded-xl overflow-hidden mb-4">
+            {content.pages[currentPage]?.image_url ? (
+              <img 
+                src={content.pages[currentPage].image_url}
+                alt={`Page ${currentPage + 1}`}
+                className="w-full h-auto"
+              />
+            ) : content.pages[currentPage]?.image_base64 ? (
+              <img 
+                src={`data:image/png;base64,${content.pages[currentPage].image_base64}`}
+                alt={`Page ${currentPage + 1}`}
+                className="w-full h-auto"
+              />
+            ) : (
+              <div className="h-96 flex items-center justify-center text-text-muted">
+                No image for this page
+              </div>
+            )}
+          </div>
+
+          {/* Page Navigation */}
+          <div className="flex items-center justify-between mb-6">
+            <button
+              onClick={() => setCurrentPage(p => Math.max(0, p - 1))}
+              disabled={currentPage === 0}
+              className="flex items-center gap-2 px-4 py-2 bg-surface hover:bg-surface-hover disabled:opacity-50 border border-border rounded-lg transition-colors"
+            >
+              <ChevronLeft className="w-4 h-4" />
+              Previous
+            </button>
+            
+            <span className="text-sm text-text-muted">
+              Page {currentPage + 1} of {content.pages.length}
+            </span>
+            
+            <button
+              onClick={() => setCurrentPage(p => Math.min(content.pages!.length - 1, p + 1))}
+              disabled={currentPage === content.pages.length - 1}
+              className="flex items-center gap-2 px-4 py-2 bg-surface hover:bg-surface-hover disabled:opacity-50 border border-border rounded-lg transition-colors"
+            >
+              Next
+              <ChevronRight className="w-4 h-4" />
+            </button>
+          </div>
+
+          {/* Page Narration */}
+          {content.pages[currentPage]?.narration_text && (
+            <div className="bg-surface border border-border rounded-xl p-4 mb-4">
+              <h4 className="text-sm font-medium text-atlas-400 mb-2">Narration</h4>
+              <p className="text-text-secondary">{content.pages[currentPage].narration_text}</p>
+            </div>
+          )}
+
+          {/* Page Thumbnails */}
+          <div className="flex gap-2 overflow-x-auto pb-2">
+            {content.pages.map((page, idx) => (
+              <button
+                key={page.id}
+                onClick={() => setCurrentPage(idx)}
+                className={`flex-shrink-0 w-16 h-16 rounded-lg overflow-hidden border-2 transition-colors ${
+                  idx === currentPage ? 'border-atlas-400' : 'border-transparent hover:border-border'
+                }`}
+              >
+                {page.image_url ? (
+                  <img src={page.image_url} alt={`Thumb ${idx + 1}`} className="w-full h-full object-cover" />
+                ) : page.image_base64 ? (
+                  <img src={`data:image/png;base64,${page.image_base64}`} alt={`Thumb ${idx + 1}`} className="w-full h-full object-cover" />
+                ) : (
+                  <div className="w-full h-full bg-surface-hover flex items-center justify-center text-xs text-text-muted">
+                    {idx + 1}
+                  </div>
+                )}
+              </button>
+            ))}
+          </div>
+        </div>
+      ) : (
+        <article className="prose-reading prose prose-invert max-w-none" style={{ fontFamily: "'Times New Roman', Times, Georgia, serif" }}>
+          <ReactMarkdown>{content.content || ''}</ReactMarkdown>
+        </article>
+      )}
 
       {/* Chat Panel */}
       {showChat && (

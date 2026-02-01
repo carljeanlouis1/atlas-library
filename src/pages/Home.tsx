@@ -1,10 +1,10 @@
 import { useEffect, useState } from 'react'
 import { Link } from 'react-router-dom'
-import { BookOpen, Headphones, FileText, Gavel, Loader2 } from 'lucide-react'
+import { BookOpen, Headphones, FileText, Gavel, Loader2, Image } from 'lucide-react'
 
 interface ContentItem {
   id: string
-  type: 'text' | 'audio' | 'debate' | 'brief'
+  type: 'text' | 'audio' | 'debate' | 'brief' | 'story'
   title: string
   content?: string
   audio_url?: string
@@ -18,12 +18,13 @@ const typeIcons = {
   audio: Headphones,
   brief: FileText,
   debate: Gavel,
+  story: Image,
 }
 
 export default function Home() {
   const [content, setContent] = useState<ContentItem[]>([])
   const [loading, setLoading] = useState(true)
-  const [counts, setCounts] = useState({ text: 0, audio: 0, brief: 0, debate: 0 })
+  const [counts, setCounts] = useState({ text: 0, audio: 0, brief: 0, debate: 0, story: 0 })
 
   useEffect(() => {
     fetch('/api/content?limit=20')
@@ -32,7 +33,7 @@ export default function Home() {
         if (data.success) {
           setContent(data.content)
           // Count by type
-          const c = { text: 0, audio: 0, brief: 0, debate: 0 }
+          const c = { text: 0, audio: 0, brief: 0, debate: 0, story: 0 }
           data.content.forEach((item: ContentItem) => {
             if (c[item.type] !== undefined) c[item.type]++
           })
@@ -48,6 +49,7 @@ export default function Home() {
     { type: 'audio' as const, icon: Headphones, label: 'Audio Notes', count: counts.audio },
     { type: 'brief' as const, icon: FileText, label: 'Morning Briefs', count: counts.brief },
     { type: 'debate' as const, icon: Gavel, label: 'Tribunal Debates', count: counts.debate },
+    { type: 'story' as const, icon: Image, label: 'Visual Stories', count: counts.story },
   ]
 
   return (

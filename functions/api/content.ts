@@ -3,14 +3,23 @@ interface Env {
   ATLAS_API_KEY: string;
 }
 
+interface StoryPage {
+  page_number: number;
+  image_url?: string;
+  image_base64?: string;
+  narration?: { segment_id: number; narration_text: string; pause_after_ms?: number }[];
+}
+
 interface ContentRequest {
-  type: 'text' | 'audio' | 'debate' | 'brief';
+  type: 'text' | 'audio' | 'debate' | 'brief' | 'story';
   title: string;
   content?: string;
   audioUrl?: string;
   imageUrl?: string;
   metadata?: Record<string, unknown>;
   tags?: string[];
+  // For story type
+  pages?: StoryPage[];
 }
 
 // GET /api/content - List content
@@ -66,6 +75,26 @@ export const onRequestPost: PagesFunction<Env> = async (context) => {
     body.imageUrl || null,
     body.metadata ? JSON.stringify(body.metadata) : null
   ).run();
+
+  // Handle story pages
+  if (body.type === 'story' && body.pages && body.pages.length > 0) {
+    for (const page of body.pages) {
+      const pageId = crypto.randomUUID();
+      const narrationText = page.narration?.map(n => n.narration_text).join(' ') || null;
+      
+      await context.env.DB.prepare(
+        'INSERT INTO story_pages (id, content_id, page_number, image_url, image_base64, narration_text, narration_segments) VALUES (?, ?, ?, ?, ?, ?, ?)'
+      ).bind(
+        pageId,
+        id,
+        page.page_number,
+        page.image_url || null,
+        page.image_base64 || null,
+        narrationText,
+        page.narration ? JSON.stringify(page.narration) : null
+      ).run();
+    }
+  }
 
   // Handle tags
   if (body.tags && body.tags.length > 0) {
