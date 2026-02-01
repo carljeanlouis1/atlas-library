@@ -1,6 +1,7 @@
 interface Env {
   DB: D1Database;
   OPENAI_API_KEY?: string;
+  ECHO_STUDIO_API_KEY?: string;
 }
 
 interface TTSRequest {
@@ -20,10 +21,16 @@ export const onRequestPost: PagesFunction<Env> = async (context) => {
     });
   }
 
-  // For now, use Echo Studio API for TTS
-  // This proxies to the existing Echo Studio service
+  // Use Echo Studio API for TTS
   const echoStudioUrl = 'https://echo-studio.pages.dev/api/atlas/generate';
-  const echoApiKey = '200063379dee4139c9207e8494d094b5c85b99c49fda9124da62173ac81a6a11';
+  const echoApiKey = context.env.ECHO_STUDIO_API_KEY;
+  
+  if (!echoApiKey) {
+    return new Response(JSON.stringify({ error: 'Echo Studio API key not configured' }), {
+      status: 500,
+      headers: { 'Content-Type': 'application/json' },
+    });
+  }
 
   try {
     const response = await fetch(echoStudioUrl, {
