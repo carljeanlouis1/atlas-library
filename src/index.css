@@ -26,10 +26,9 @@ html {
   scroll-behavior: smooth;
 }
 
-/* Reading typography - comfortable size */
+/* Reading typography - Times New Roman style */
 .prose-reading {
-  @apply font-serif text-base leading-relaxed;
-  font-size: 1rem;
+  font-family: 'Times New Roman', Times, Georgia, serif;
   line-height: 1.8;
 }
 
@@ -38,15 +37,18 @@ html {
 }
 
 .prose-reading h1 {
-  @apply font-sans text-2xl font-bold mb-5 mt-10;
+  font-family: 'Times New Roman', Times, Georgia, serif;
+  @apply text-2xl font-bold mb-5 mt-10;
 }
 
 .prose-reading h2 {
-  @apply font-sans text-xl font-semibold mb-4 mt-8;
+  font-family: 'Times New Roman', Times, Georgia, serif;
+  @apply text-xl font-semibold mb-4 mt-8;
 }
 
 .prose-reading h3 {
-  @apply font-sans text-lg font-medium mb-3 mt-6;
+  font-family: 'Times New Roman', Times, Georgia, serif;
+  @apply text-lg font-medium mb-3 mt-6;
 }
 
 /* Audio player styling */
@@ -69,18 +71,32 @@ html {
   @apply transition-all duration-200 hover:bg-surface-hover hover:border-atlas-700/30;
 }
 
-/* Font size controls */
-.font-size-sm .prose-reading {
-  font-size: 0.875rem;
-  line-height: 1.7;
+/* Font size controls - applied globally */
+html.font-size-sm .prose-reading,
+html.font-size-sm .prose-reading p,
+html.font-size-sm .prose-reading li,
+html.font-size-sm article {
+  font-size: 0.9rem !important;
+  line-height: 1.7 !important;
 }
 
-.font-size-md .prose-reading {
-  font-size: 1rem;
-  line-height: 1.8;
+html.font-size-md .prose-reading,
+html.font-size-md .prose-reading p,
+html.font-size-md .prose-reading li,
+html.font-size-md article {
+  font-size: 1rem !important;
+  line-height: 1.8 !important;
 }
 
-.font-size-lg .prose-reading {
-  font-size: 1.125rem;
-  line-height: 1.9;
+html.font-size-lg .prose-reading,
+html.font-size-lg .prose-reading p,
+html.font-size-lg .prose-reading li,
+html.font-size-lg article {
+  font-size: 1.15rem !important;
+  line-height: 1.9 !important;
+}
+
+/* Apply serif font to all content reading areas */
+article, .content-text {
+  font-family: 'Times New Roman', Times, Georgia, serif;
 }

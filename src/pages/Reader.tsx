@@ -37,6 +37,13 @@ export default function Reader() {
   const [currentTime, setCurrentTime] = useState(0)
   const [duration, setDuration] = useState(0)
 
+  // Apply font size setting on load
+  useEffect(() => {
+    const fontSize = localStorage.getItem('atlas-font-size') || 'md'
+    document.documentElement.classList.remove('font-size-sm', 'font-size-md', 'font-size-lg')
+    document.documentElement.classList.add(`font-size-${fontSize}`)
+  }, [])
+
   useEffect(() => {
     fetch(`/api/content/${id}`)
       .then(res => res.json())
@@ -260,7 +267,7 @@ export default function Reader() {
       </div>
 
       {/* Content */}
-      <article className="prose-reading prose prose-invert max-w-none">
+      <article className="prose-reading prose prose-invert max-w-none" style={{ fontFamily: "'Times New Roman', Times, Georgia, serif" }}>
         <ReactMarkdown>{content.content || ''}</ReactMarkdown>
       </article>
 
