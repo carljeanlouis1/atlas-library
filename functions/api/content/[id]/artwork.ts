@@ -13,7 +13,12 @@ interface ContentRow {
   image_url: string | null;
 }
 
+interface ArtworkRequest {
+  style?: 'infographic' | 'comic' | 'editorial' | 'abstract' | 'minimal';
+}
+
 // POST /api/content/[id]/artwork - Generate artwork for content using Gemini
+// Optional body: { "style": "infographic" | "comic" | "editorial" | "abstract" | "minimal" }
 export const onRequestPost: PagesFunction<Env> = async (context) => {
   // Verify API key
   const authHeader = context.request.headers.get('Authorization');
@@ -28,6 +33,17 @@ export const onRequestPost: PagesFunction<Env> = async (context) => {
 
   const contentId = context.params.id as string;
   
+  // Parse optional style from request body
+  let style: ArtworkRequest['style'] = 'infographic'; // Default to infographic
+  try {
+    const body = await context.request.json() as ArtworkRequest;
+    if (body.style) {
+      style = body.style;
+    }
+  } catch {
+    // No body or invalid JSON - use default
+  }
+  
   // Fetch content
   const content = await context.env.DB.prepare(
     'SELECT id, type, title, content, image_url FROM content WHERE id = ?'
@@ -40,9 +56,9 @@ export const onRequestPost: PagesFunction<Env> = async (context) => {
     });
   }
 
-  // Build prompt from content
+  // Build prompt from content with style
   const contentPreview = content.content?.slice(0, 2000) || '';
-  const prompt = buildArtworkPrompt(content.type, content.title, contentPreview);
+  const prompt = buildArtworkPrompt(content.type, content.title, contentPreview, style);
 
   try {
     // Generate image with Gemini
@@ -58,8 +74,9 @@ export const onRequestPost: PagesFunction<Env> = async (context) => {
       },
     });
 
-    // Update content with image URL
-    const imageUrl = `https://images.atlas-library.pages.dev/${key}`;
+    // Update content with image URL - use simple key format with -- separator
+    const urlKey = key.replace(/\//g, '--');
+    const imageUrl = `https://atlas-library.pages.dev/api/img/${urlKey}`;
     
     await context.env.DB.prepare(
       'UPDATE content SET image_url = ?, updated_at = CURRENT_TIMESTAMP WHERE id = ?'
@@ -68,6 +85,7 @@ export const onRequestPost: PagesFunction<Env> = async (context) => {
     return new Response(JSON.stringify({ 
       success: true, 
       imageUrl,
+      style,
     }), {
       headers: { 'Content-Type': 'application/json' },
     });
@@ -84,26 +102,37 @@ export const onRequestPost: PagesFunction<Env> = async (context) => {
   }
 };
 
-function buildArtworkPrompt(type: string, title: string, content: string): string {
+function buildArtworkPrompt(type: string, title: string, content: string, style: ArtworkRequest['style']): string {
   // Extract key themes from content
   const themes = extractThemes(content);
   
-  const styleGuide = {
-    brief: 'Abstract digital art with flowing data streams, warm sunrise colors (gold, orange, deep blue), interconnected nodes, sleek futuristic aesthetic, editorial illustration style',
-    text: 'Artistic illustration capturing the narrative essence, rich colors, atmospheric lighting, editorial quality',
-    audio: 'Sound wave visualization merging with abstract imagery, dynamic flowing forms, musical energy',
-    debate: 'Two contrasting perspectives visualized abstractly, balanced composition, intellectual atmosphere, debate/discourse imagery',
+  // Style-specific instructions
+  const styleGuides: Record<string, string> = {
+    infographic: 'Clean modern infographic style with icons, data visualization elements, organized layout with visual hierarchy, professional business aesthetic, flat design with subtle gradients, information-focused composition',
+    comic: 'Bold comic book style with dynamic panels, vibrant colors, strong outlines, action-oriented composition, graphic novel aesthetic',
+    editorial: 'Sophisticated editorial illustration style, artistic and conceptual, rich colors, atmospheric lighting, magazine cover quality',
+    abstract: 'Abstract digital art with flowing shapes, geometric patterns, vibrant color gradients, modern artistic composition',
+    minimal: 'Minimalist design with clean lines, limited color palette, negative space, simple iconic elements, elegant simplicity',
   };
+  
+  const styleInstruction = styleGuides[style || 'infographic'];
+  
+  // Text guidance varies by style
+  const textGuidance = style === 'infographic' 
+    ? 'Include clear, readable text labels, headers, and data callouts where appropriate. Text should be crisp and well-integrated into the design.'
+    : style === 'minimal'
+    ? 'Text is optional - use sparingly if at all, only for essential labels.'
+    : 'Include the title text prominently in the design.';
 
-  const style = styleGuide[type as keyof typeof styleGuide] || styleGuide.text;
+  return `Create a visually striking ${style} artwork for: "${title}"
 
-  return `Create a visually striking artwork for: "${title}"
+Key themes and concepts: ${themes}
 
-Key themes: ${themes}
+Style requirements: ${styleInstruction}
 
-Style requirements: ${style}
+${textGuidance}
 
-The image should be suitable as a header/hero image for a digital article. High quality, professional editorial illustration. No text in the image.`;
+The image should be suitable as a header/hero image for a digital article. High quality, professional.`;
 }
 
 function extractThemes(content: string): string {
@@ -114,9 +143,9 @@ function extractThemes(content: string): string {
 }
 
 async function generateWithGemini(apiKey: string, prompt: string): Promise<ArrayBuffer> {
-  // Use Gemini 2.0 Flash experimental image generation model
+  // Use Gemini 3 Pro Image Preview (nano banana pro)
   const response = await fetch(
-    `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash-exp-image-generation:generateContent?key=${apiKey}`,
+    `https://generativelanguage.googleapis.com/v1beta/models/gemini-3-pro-image-preview:generateContent?key=${apiKey}`,
     {
       method: 'POST',
       headers: {
