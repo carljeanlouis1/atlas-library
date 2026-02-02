@@ -107,8 +107,9 @@ export default function Audio() {
             onChange={(e) => {
               const time = parseFloat(e.target.value)
               if (audioRef.current) audioRef.current.currentTime = time
+              setCurrentTime(time)
             }}
-            className="w-full h-1 bg-border rounded-lg appearance-none cursor-pointer [&::-webkit-slider-thumb]:appearance-none [&::-webkit-slider-thumb]:w-3 [&::-webkit-slider-thumb]:h-3 [&::-webkit-slider-thumb]:rounded-full [&::-webkit-slider-thumb]:bg-atlas-400"
+            className="audio-slider w-full"
           />
         </div>
       )}

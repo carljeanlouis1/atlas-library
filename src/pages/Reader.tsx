@@ -244,7 +244,7 @@ export default function Reader() {
                 max={duration || 100}
                 value={currentTime}
                 onChange={handleSeek}
-                className="flex-1 h-1 bg-border rounded-lg appearance-none cursor-pointer [&::-webkit-slider-thumb]:appearance-none [&::-webkit-slider-thumb]:w-3 [&::-webkit-slider-thumb]:h-3 [&::-webkit-slider-thumb]:rounded-full [&::-webkit-slider-thumb]:bg-atlas-400"
+                className="audio-slider flex-1"
               />
               <span className="text-sm text-text-muted w-12">{formatTime(duration)}</span>
             </div>
