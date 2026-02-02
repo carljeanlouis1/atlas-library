@@ -62,8 +62,8 @@ export const onRequestPost: PagesFunction<Env> = async (context) => {
     },
   });
 
-  // Return public URL (assuming public bucket or custom domain)
-  const publicUrl = `https://images.atlas-library.pages.dev/${key}`;
+  // Return public URL via API route
+  const publicUrl = `https://atlas-library.pages.dev/api/images/${key}`;
   
   return new Response(JSON.stringify({ 
     success: true, 
