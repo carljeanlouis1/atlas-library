@@ -48,7 +48,10 @@ export default function Audio() {
 
   const skip = (seconds: number) => {
     if (audioRef.current) {
-      audioRef.current.currentTime = Math.max(0, Math.min(audioRef.current.currentTime + seconds, duration))
+      const audioDuration = audioRef.current.duration || 0
+      if (audioDuration > 0) {
+        audioRef.current.currentTime = Math.max(0, Math.min(audioRef.current.currentTime + seconds, audioDuration))
+      }
     }
   }
 
@@ -67,8 +70,11 @@ export default function Audio() {
       {/* Hidden audio element */}
       <audio
         ref={audioRef}
+        preload="metadata"
         onTimeUpdate={() => setCurrentTime(audioRef.current?.currentTime || 0)}
         onLoadedMetadata={() => setDuration(audioRef.current?.duration || 0)}
+        onDurationChange={() => setDuration(audioRef.current?.duration || 0)}
+        onCanPlay={() => setDuration(audioRef.current?.duration || 0)}
         onEnded={() => setIsPlaying(false)}
       />
 
@@ -106,8 +112,13 @@ export default function Audio() {
             value={currentTime}
             onChange={(e) => {
               const time = parseFloat(e.target.value)
-              if (audioRef.current) audioRef.current.currentTime = time
-              setCurrentTime(time)
+              if (audioRef.current) {
+                const audioDuration = audioRef.current.duration || 0
+                if (audioDuration > 0 && time >= 0 && time <= audioDuration) {
+                  audioRef.current.currentTime = time
+                  setCurrentTime(time)
+                }
+              }
             }}
             className="audio-slider w-full"
           />

@@ -87,7 +87,10 @@ export default function Reader() {
 
   const skip = (seconds: number) => {
     if (audioRef.current) {
-      audioRef.current.currentTime = Math.max(0, Math.min(audioRef.current.currentTime + seconds, duration))
+      const audioDuration = audioRef.current.duration || 0
+      if (audioDuration > 0) {
+        audioRef.current.currentTime = Math.max(0, Math.min(audioRef.current.currentTime + seconds, audioDuration))
+      }
     }
   }
 
@@ -112,8 +115,11 @@ export default function Reader() {
   const handleSeek = (e: React.ChangeEvent<HTMLInputElement>) => {
     const time = parseFloat(e.target.value)
     if (audioRef.current) {
-      audioRef.current.currentTime = time
-      setCurrentTime(time)
+      const audioDuration = audioRef.current.duration || 0
+      if (audioDuration > 0 && time >= 0 && time <= audioDuration) {
+        audioRef.current.currentTime = time
+        setCurrentTime(time)
+      }
     }
   }
 
@@ -199,8 +205,19 @@ export default function Reader() {
           <audio
             ref={audioRef}
             src={audioUrl}
+            preload="metadata"
             onTimeUpdate={handleTimeUpdate}
             onLoadedMetadata={handleLoadedMetadata}
+            onDurationChange={() => {
+              if (audioRef.current && audioRef.current.duration) {
+                setDuration(audioRef.current.duration)
+              }
+            }}
+            onCanPlay={() => {
+              if (audioRef.current && audioRef.current.duration) {
+                setDuration(audioRef.current.duration)
+              }
+            }}
             onEnded={() => setIsPlaying(false)}
           />
           
