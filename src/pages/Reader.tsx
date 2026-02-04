@@ -39,6 +39,7 @@ export default function Reader() {
   const [content, setContent] = useState<ContentItem | null>(null)
   const [loading, setLoading] = useState(true)
   const [generating, setGenerating] = useState(false)
+  const [generatingArtwork, setGeneratingArtwork] = useState(false)
   const [audioUrl, setAudioUrl] = useState<string | null>(null)
   const [showChat, setShowChat] = useState(false)
   
@@ -149,6 +150,27 @@ export default function Reader() {
       console.error('TTS generation failed:', err)
     }
     setGenerating(false)
+  }
+
+  // Generate artwork using Nano Banana Pro (Gemini)
+  const generateArtwork = async () => {
+    if (!content) return
+    setGeneratingArtwork(true)
+    
+    try {
+      const response = await fetch(`/api/content/${id}/artwork`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' }
+      })
+      const data = await response.json()
+      if (data.success && data.imageUrl) {
+        // Update content with new image
+        setContent(prev => prev ? { ...prev, image_url: data.imageUrl } : null)
+      }
+    } catch (err) {
+      console.error('Artwork generation failed:', err)
+    }
+    setGeneratingArtwork(false)
   }
 
   if (loading) {
@@ -273,6 +295,20 @@ export default function Reader() {
 
       {/* Actions */}
       <div className="flex items-center gap-2 mb-8 pb-8 border-b border-border">
+        {!content.image_url && content.content && (
+          <button
+            onClick={generateArtwork}
+            disabled={generatingArtwork}
+            className="flex items-center gap-2 px-4 py-2 bg-atlas-500 hover:bg-atlas-600 disabled:opacity-50 text-white rounded-lg transition-colors"
+          >
+            {generatingArtwork ? (
+              <Loader2 className="w-4 h-4 animate-spin" />
+            ) : (
+              <span>🎨</span>
+            )}
+            {generatingArtwork ? 'Generating Artwork...' : 'Generate Artwork'}
+          </button>
+        )}
         {!audioUrl && content.content && (
           <button
             onClick={generateSpeech}
