@@ -25,6 +25,7 @@ export default function Home() {
   const [content, setContent] = useState<ContentItem[]>([])
   const [loading, setLoading] = useState(true)
   const [counts, setCounts] = useState({ text: 0, audio: 0, brief: 0, debate: 0, story: 0 })
+  const [selectedType, setSelectedType] = useState<string | null>(null)
 
   useEffect(() => {
     fetch('/api/content?limit=20')
@@ -64,10 +65,14 @@ export default function Home() {
       <div className="grid grid-cols-2 md:grid-cols-4 gap-4 mb-12">
         {contentTypes.map((ct) => {
           const Icon = ct.icon
+          const isActive = selectedType === ct.type
           return (
             <div
               key={ct.type}
-              className="bg-surface border border-border rounded-xl p-4 content-card cursor-pointer"
+              onClick={() => setSelectedType(selectedType === ct.type ? null : ct.type)}
+              className={`bg-surface border rounded-xl p-4 content-card cursor-pointer transition-colors ${
+                isActive ? 'border-atlas-400 bg-atlas-400/10' : 'border-border'
+              }`}
             >
               <Icon className="w-6 h-6 text-atlas-400 mb-3" />
               <div className="text-2xl font-bold mb-1">{ct.count}</div>
@@ -79,7 +84,19 @@ export default function Home() {
 
       {/* Recent content */}
       <div>
-        <h2 className="text-xl font-semibold mb-4">Recent</h2>
+        <div className="flex items-center justify-between mb-4">
+          <h2 className="text-xl font-semibold">
+            {selectedType ? `${contentTypes.find(ct => ct.type === selectedType)?.label || 'Recent'}` : 'Recent'}
+          </h2>
+          {selectedType && (
+            <button
+              onClick={() => setSelectedType(null)}
+              className="text-sm text-atlas-400 hover:text-atlas-300"
+            >
+              Show all
+            </button>
+          )}
+        </div>
         
         {loading ? (
           <div className="flex items-center justify-center py-12">
@@ -91,7 +108,7 @@ export default function Home() {
           </div>
         ) : (
           <div className="space-y-3">
-            {content.map((item) => {
+            {content.filter(item => !selectedType || item.type === selectedType).map((item) => {
               const Icon = typeIcons[item.type] || BookOpen
               const date = new Date(item.created_at).toLocaleDateString()
               return (
