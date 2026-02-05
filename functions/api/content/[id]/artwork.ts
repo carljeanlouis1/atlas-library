@@ -1,7 +1,6 @@
 interface Env {
   DB: D1Database;
   IMAGES: R2Bucket;
-  ATLAS_API_KEY: string;
   GEMINI_API_KEY: string;
 }
 
@@ -17,20 +16,9 @@ interface ArtworkRequest {
   style?: 'infographic' | 'comic' | 'editorial' | 'abstract' | 'minimal';
 }
 
-// POST /api/content/[id]/artwork - Generate artwork for content using Gemini
+// POST /api/content/[id]/artwork - Generate artwork for content using Gemini 3 Pro Image Preview
 // Optional body: { "style": "infographic" | "comic" | "editorial" | "abstract" | "minimal" }
 export const onRequestPost: PagesFunction<Env> = async (context) => {
-  // Verify API key
-  const authHeader = context.request.headers.get('Authorization');
-  const apiKey = authHeader?.replace('Bearer ', '');
-  
-  if (apiKey !== context.env.ATLAS_API_KEY) {
-    return new Response(JSON.stringify({ error: 'Unauthorized' }), {
-      status: 401,
-      headers: { 'Content-Type': 'application/json' },
-    });
-  }
-
   const contentId = context.params.id as string;
   
   // Parse optional style from request body
