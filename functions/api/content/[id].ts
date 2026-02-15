@@ -1,5 +1,6 @@
 interface Env {
   DB: D1Database;
+  ATLAS_API_KEY: string;
 }
 
 // GET /api/content/:id - Get single content item
@@ -52,6 +53,47 @@ export const onRequestGet: PagesFunction<Env> = async (context) => {
       pages,
     },
   }), {
+    headers: { 'Content-Type': 'application/json' },
+  });
+};
+
+// DELETE /api/content/:id - Delete content item
+export const onRequestDelete: PagesFunction<Env> = async (context) => {
+  // Verify API key
+  const authHeader = context.request.headers.get('Authorization');
+  const apiKey = authHeader?.replace('Bearer ', '');
+
+  if (apiKey !== context.env.ATLAS_API_KEY) {
+    return new Response(JSON.stringify({ error: 'Unauthorized' }), {
+      status: 401,
+      headers: { 'Content-Type': 'application/json' },
+    });
+  }
+
+  const id = context.params.id as string;
+
+  // Check if content exists
+  const content = await context.env.DB.prepare(
+    'SELECT id, type FROM content WHERE id = ?'
+  ).bind(id).first();
+
+  if (!content) {
+    return new Response(JSON.stringify({ error: 'Not found' }), {
+      status: 404,
+      headers: { 'Content-Type': 'application/json' },
+    });
+  }
+
+  // Delete related records first (foreign key order)
+  await context.env.DB.prepare('DELETE FROM chat_messages WHERE content_id = ?').bind(id).run();
+  await context.env.DB.prepare('DELETE FROM content_tags WHERE content_id = ?').bind(id).run();
+  if (content.type === 'story') {
+    await context.env.DB.prepare('DELETE FROM story_pages WHERE content_id = ?').bind(id).run();
+  }
+  // Delete the content itself
+  await context.env.DB.prepare('DELETE FROM content WHERE id = ?').bind(id).run();
+
+  return new Response(JSON.stringify({ success: true, deleted: id }), {
     headers: { 'Content-Type': 'application/json' },
   });
 };
