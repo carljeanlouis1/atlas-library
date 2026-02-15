@@ -57,6 +57,76 @@ export const onRequestGet: PagesFunction<Env> = async (context) => {
   });
 };
 
+// PATCH /api/content/:id - Update content item
+export const onRequestPatch: PagesFunction<Env> = async (context) => {
+  const authHeader = context.request.headers.get('Authorization');
+  const apiKey = authHeader?.replace('Bearer ', '');
+
+  if (apiKey !== context.env.ATLAS_API_KEY) {
+    return new Response(JSON.stringify({ error: 'Unauthorized' }), {
+      status: 401,
+      headers: { 'Content-Type': 'application/json' },
+    });
+  }
+
+  const id = context.params.id as string;
+
+  const existing = await context.env.DB.prepare(
+    'SELECT id FROM content WHERE id = ?'
+  ).bind(id).first();
+
+  if (!existing) {
+    return new Response(JSON.stringify({ error: 'Not found' }), {
+      status: 404,
+      headers: { 'Content-Type': 'application/json' },
+    });
+  }
+
+  const body = await context.request.json() as Record<string, unknown>;
+
+  // Build dynamic UPDATE query from provided fields
+  const allowedFields: Record<string, string> = {
+    title: 'title',
+    content: 'content',
+    audioUrl: 'audio_url',
+    audio_url: 'audio_url',
+    imageUrl: 'image_url',
+    image_url: 'image_url',
+    type: 'type',
+    folder: 'folder',
+    metadata: 'metadata',
+  };
+
+  const setClauses: string[] = [];
+  const values: unknown[] = [];
+
+  for (const [key, dbCol] of Object.entries(allowedFields)) {
+    if (key in body) {
+      setClauses.push(`${dbCol} = ?`);
+      const val = body[key];
+      values.push(key === 'metadata' && typeof val === 'object' ? JSON.stringify(val) : val);
+    }
+  }
+
+  if (setClauses.length === 0) {
+    return new Response(JSON.stringify({ error: 'No valid fields to update' }), {
+      status: 400,
+      headers: { 'Content-Type': 'application/json' },
+    });
+  }
+
+  setClauses.push('updated_at = CURRENT_TIMESTAMP');
+  values.push(id);
+
+  await context.env.DB.prepare(
+    `UPDATE content SET ${setClauses.join(', ')} WHERE id = ?`
+  ).bind(...values).run();
+
+  return new Response(JSON.stringify({ success: true, updated: id }), {
+    headers: { 'Content-Type': 'application/json' },
+  });
+};
+
 // DELETE /api/content/:id - Delete content item
 export const onRequestDelete: PagesFunction<Env> = async (context) => {
   // Verify API key
