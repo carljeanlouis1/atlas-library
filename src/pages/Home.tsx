@@ -142,42 +142,43 @@ export default function Home() {
         )}
       </div>
 
-      {/* Filter chips + view toggle */}
-      <div className="flex items-center gap-2 mb-5 overflow-x-auto pb-1 -mx-4 px-4 md:mx-0 md:px-0">
-        <div className="flex items-center gap-2 flex-1 min-w-0">
-          {contentTypes.filter(ct => ct.count > 0).map((ct) => {
-            const isActive = selectedType === ct.type
-            return (
-              <button
-                key={ct.type}
-                onClick={() => setSelectedType(isActive ? null : ct.type)}
-                className={`flex items-center gap-1.5 px-3 py-1.5 rounded-full text-xs font-medium whitespace-nowrap transition-colors ${
-                  isActive
-                    ? 'bg-atlas-400 text-white'
-                    : 'bg-surface border border-border text-text-secondary hover:border-atlas-400/50'
-                }`}
-              >
-                <ct.icon className="w-3 h-3" />
-                {ct.label}
-                <span className={isActive ? 'text-white/70' : 'text-text-muted'}>{ct.count}</span>
-              </button>
-            )
-          })}
-        </div>
-        <div className="flex items-center border border-border rounded-lg overflow-hidden shrink-0">
+      {/* View toggle + filter chips */}
+      <div className="flex items-center justify-between mb-3">
+        <span className="text-xs text-text-muted">{filtered.length} result{filtered.length !== 1 ? 's' : ''}</span>
+        <div className="flex items-center gap-1 border border-border rounded-lg overflow-hidden">
           <button
             onClick={() => toggleView('grid')}
-            className={`p-1.5 ${viewMode === 'grid' ? 'bg-atlas-400/20 text-atlas-400' : 'text-text-muted hover:text-text-secondary'}`}
+            className={`p-2 ${viewMode === 'grid' ? 'bg-atlas-400/20 text-atlas-400' : 'text-text-muted hover:text-text-secondary'}`}
           >
             <LayoutGrid className="w-4 h-4" />
           </button>
           <button
             onClick={() => toggleView('list')}
-            className={`p-1.5 ${viewMode === 'list' ? 'bg-atlas-400/20 text-atlas-400' : 'text-text-muted hover:text-text-secondary'}`}
+            className={`p-2 ${viewMode === 'list' ? 'bg-atlas-400/20 text-atlas-400' : 'text-text-muted hover:text-text-secondary'}`}
           >
             <List className="w-4 h-4" />
           </button>
         </div>
+      </div>
+      <div className="flex items-center gap-2 mb-5 overflow-x-auto pb-1 -mx-4 px-4 md:mx-0 md:px-0">
+        {contentTypes.filter(ct => ct.count > 0).map((ct) => {
+          const isActive = selectedType === ct.type
+          return (
+            <button
+              key={ct.type}
+              onClick={() => setSelectedType(isActive ? null : ct.type)}
+              className={`flex items-center gap-1.5 px-3 py-1.5 rounded-full text-xs font-medium whitespace-nowrap transition-colors ${
+                isActive
+                  ? 'bg-atlas-400 text-white'
+                  : 'bg-surface border border-border text-text-secondary hover:border-atlas-400/50'
+              }`}
+            >
+              <ct.icon className="w-3 h-3" />
+              {ct.label}
+              <span className={isActive ? 'text-white/70' : 'text-text-muted'}>{ct.count}</span>
+            </button>
+          )
+        })}
       </div>
 
       {/* Results */}
