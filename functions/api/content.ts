@@ -30,12 +30,25 @@ export const onRequestGet: PagesFunction<Env> = async (context) => {
   const limit = parseInt(url.searchParams.get('limit') || '20');
   const offset = parseInt(url.searchParams.get('offset') || '0');
 
+  const search = url.searchParams.get('search');
+
   let query = 'SELECT * FROM content';
   const params: unknown[] = [];
+  const conditions: string[] = [];
 
   if (type) {
-    query += ' WHERE type = ?';
+    conditions.push('type = ?');
     params.push(type);
+  }
+
+  if (search) {
+    conditions.push('(title LIKE ? OR content LIKE ?)');
+    const searchTerm = `%${search}%`;
+    params.push(searchTerm, searchTerm);
+  }
+
+  if (conditions.length > 0) {
+    query += ' WHERE ' + conditions.join(' AND ');
   }
 
   query += ' ORDER BY created_at DESC LIMIT ? OFFSET ?';
