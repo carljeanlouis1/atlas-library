@@ -205,8 +205,42 @@ export default function Audio() {
 
       {/* Now Playing Bar */}
       {activeItem && (
-        <div className="bg-surface border border-border rounded-xl p-4 mb-6 sticky top-20 z-40">
-          <div className="flex items-center gap-4 mb-3">
+        <div className="bg-surface border border-border rounded-xl p-3 sm:p-4 mb-6 sticky top-16 sm:top-20 z-40">
+          {/* Title row */}
+          <div className="flex items-center gap-2 mb-2">
+            <div className="flex-1 min-w-0">
+              <div className="font-medium text-sm sm:text-base truncate">{activeItem.title}</div>
+            </div>
+            <button
+              onClick={handleManualBookmark}
+              className="p-1.5 hover:bg-surface-hover rounded-lg transition-colors flex-shrink-0"
+              title="Save position"
+            >
+              <Bookmark className={`w-4 h-4 ${bookmarkSaved ? 'text-atlas-400 fill-atlas-400' : 'text-text-muted'}`} />
+            </button>
+          </div>
+          {/* Seek slider — always visible */}
+          <div className="mb-2">
+            <input
+              type="range"
+              min="0"
+              max={duration || 100}
+              value={currentTime}
+              onChange={(e) => {
+                const time = parseFloat(e.target.value)
+                if (audioRef.current) {
+                  const audioDuration = audioRef.current.duration || 0
+                  if (audioDuration > 0 && time >= 0 && time <= audioDuration) {
+                    audioRef.current.currentTime = time
+                    setCurrentTime(time)
+                  }
+                }
+              }}
+              className="audio-slider w-full"
+            />
+          </div>
+          {/* Controls row */}
+          <div className="flex items-center gap-2 sm:gap-3">
             <button
               onClick={() => skip(-10)}
               className="p-2 hover:bg-surface-hover rounded-lg"
@@ -215,7 +249,7 @@ export default function Audio() {
             </button>
             <button
               onClick={() => playAudio(activeItem)}
-              className="w-10 h-10 rounded-full bg-atlas-500 hover:bg-atlas-600 flex items-center justify-center"
+              className="w-10 h-10 rounded-full bg-atlas-500 hover:bg-atlas-600 flex items-center justify-center flex-shrink-0"
             >
               {isPlaying ? <Pause className="w-4 h-4 text-white" /> : <Play className="w-4 h-4 text-white ml-0.5" />}
             </button>
@@ -225,45 +259,16 @@ export default function Audio() {
             >
               <SkipForward className="w-4 h-4" />
             </button>
-            <div className="flex-1 min-w-0">
-              <div className="font-medium truncate">{activeItem.title}</div>
-              <div className="text-sm text-text-muted flex items-center gap-2">
-                <span>{formatTime(currentTime)} / {formatTime(duration)}</span>
-                {resumeMessage && (
-                  <span className="text-atlas-400 text-xs animate-pulse">{resumeMessage}</span>
-                )}
-              </div>
-            </div>
-            <button
-              onClick={handleManualBookmark}
-              className="p-2 hover:bg-surface-hover rounded-lg transition-colors relative"
-              title="Save position"
-            >
-              <Bookmark className={`w-4 h-4 ${bookmarkSaved ? 'text-atlas-400 fill-atlas-400' : ''}`} />
-              {bookmarkSaved && (
-                <span className="absolute -bottom-6 left-1/2 -translate-x-1/2 text-xs text-atlas-400 whitespace-nowrap">
-                  Position saved!
-                </span>
+            <div className="flex-1 text-sm text-text-muted flex items-center gap-2">
+              <span>{formatTime(currentTime)} / {formatTime(duration)}</span>
+              {resumeMessage && (
+                <span className="text-atlas-400 text-xs animate-pulse">{resumeMessage}</span>
               )}
-            </button>
+              {bookmarkSaved && (
+                <span className="text-atlas-400 text-xs">Saved!</span>
+              )}
+            </div>
           </div>
-          <input
-            type="range"
-            min="0"
-            max={duration || 100}
-            value={currentTime}
-            onChange={(e) => {
-              const time = parseFloat(e.target.value)
-              if (audioRef.current) {
-                const audioDuration = audioRef.current.duration || 0
-                if (audioDuration > 0 && time >= 0 && time <= audioDuration) {
-                  audioRef.current.currentTime = time
-                  setCurrentTime(time)
-                }
-              }
-            }}
-            className="audio-slider w-full"
-          />
         </div>
       )}
 

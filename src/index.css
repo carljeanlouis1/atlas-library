@@ -63,24 +63,29 @@ input[type="range"].audio-slider {
   background: transparent;
   cursor: pointer;
   width: 100%;
-  height: 20px; /* Hit area */
+  height: 44px; /* Large touch target for mobile */
   margin: 0;
+  padding: 0;
+  display: block;
+  touch-action: none; /* Prevent scroll interference on mobile */
 }
 
 input[type="range"].audio-slider::-webkit-slider-runnable-track {
-  height: 4px;
+  height: 6px;
   background: #262626;
-  border-radius: 2px;
+  border-radius: 3px;
 }
 
 input[type="range"].audio-slider::-webkit-slider-thumb {
   -webkit-appearance: none;
   appearance: none;
-  width: 14px;
-  height: 14px;
+  width: 22px;
+  height: 22px;
   background: #60a5fa;
   border-radius: 50%;
-  margin-top: -5px;
+  margin-top: -8px;
+  border: 2px solid #1e1e1e;
+  box-shadow: 0 1px 4px rgba(0,0,0,0.3);
   cursor: pointer;
   transition: transform 0.1s ease;
 }
@@ -96,14 +101,14 @@ input[type="range"].audio-slider::-webkit-slider-thumb:active {
 
 /* Firefox */
 input[type="range"].audio-slider::-moz-range-track {
-  height: 4px;
+  height: 6px;
   background: #262626;
-  border-radius: 2px;
+  border-radius: 3px;
 }
 
 input[type="range"].audio-slider::-moz-range-thumb {
-  width: 14px;
-  height: 14px;
+  width: 22px;
+  height: 22px;
   background: #60a5fa;
   border: none;
   border-radius: 50%;
