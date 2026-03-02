@@ -1,5 +1,5 @@
-import { useEffect, useState, useRef } from 'react'
-import { Play, Pause, Clock, Calendar, SkipBack, SkipForward, Loader2 } from 'lucide-react'
+import { useEffect, useState, useRef, useCallback } from 'react'
+import { Play, Pause, Clock, Calendar, SkipBack, SkipForward, Loader2, Bookmark } from 'lucide-react'
 
 interface AudioItem {
   id: string
@@ -9,6 +9,41 @@ interface AudioItem {
   created_at: string
 }
 
+interface BookmarkData {
+  time: number
+  duration: number
+  updatedAt: number
+}
+
+function getBookmark(id: string): BookmarkData | null {
+  try {
+    const raw = localStorage.getItem(`atlas-audio-pos-${id}`)
+    if (!raw) return null
+    return JSON.parse(raw)
+  } catch {
+    return null
+  }
+}
+
+function saveBookmark(id: string, time: number, duration: number) {
+  if (time < 2 || duration < 1) return
+  localStorage.setItem(`atlas-audio-pos-${id}`, JSON.stringify({
+    time,
+    duration,
+    updatedAt: Date.now()
+  }))
+}
+
+function clearBookmark(id: string) {
+  localStorage.removeItem(`atlas-audio-pos-${id}`)
+}
+
+function formatTime(time: number) {
+  const mins = Math.floor(time / 60)
+  const secs = Math.floor(time % 60)
+  return `${mins}:${secs.toString().padStart(2, '0')}`
+}
+
 export default function Audio() {
   const [audioContent, setAudioContent] = useState<AudioItem[]>([])
   const [loading, setLoading] = useState(true)
@@ -16,35 +51,120 @@ export default function Audio() {
   const [isPlaying, setIsPlaying] = useState(false)
   const [currentTime, setCurrentTime] = useState(0)
   const [duration, setDuration] = useState(0)
+  const [resumeMessage, setResumeMessage] = useState<string | null>(null)
+  const [bookmarkSaved, setBookmarkSaved] = useState(false)
+  const [bookmarks, setBookmarks] = useState<Record<string, BookmarkData>>({})
   const audioRef = useRef<HTMLAudioElement>(null)
+  const lastSaveRef = useRef(0)
+  const pendingRestoreRef = useRef<string | null>(null)
+
+  // Load all bookmarks on mount
+  const refreshBookmarks = useCallback((items: AudioItem[]) => {
+    const bm: Record<string, BookmarkData> = {}
+    for (const item of items) {
+      const b = getBookmark(item.id)
+      if (b) bm[item.id] = b
+    }
+    setBookmarks(bm)
+  }, [])
 
   useEffect(() => {
     fetch('/api/content?limit=50')
       .then(res => res.json())
       .then(data => {
         if (data.success) {
-          // Filter to only items with audio
           const withAudio = data.content.filter((item: AudioItem) => item.audio_url)
           setAudioContent(withAudio)
+          refreshBookmarks(withAudio)
         }
         setLoading(false)
       })
       .catch(() => setLoading(false))
-  }, [])
+  }, [refreshBookmarks])
+
+  // Save position on beforeunload
+  useEffect(() => {
+    const handleUnload = () => {
+      if (activeId && audioRef.current) {
+        saveBookmark(activeId, audioRef.current.currentTime, audioRef.current.duration || 0)
+      }
+    }
+    window.addEventListener('beforeunload', handleUnload)
+    return () => window.removeEventListener('beforeunload', handleUnload)
+  }, [activeId])
+
+  // Throttled auto-save on timeupdate
+  const handleTimeUpdate = useCallback(() => {
+    const time = audioRef.current?.currentTime || 0
+    setCurrentTime(time)
+    if (activeId) {
+      const now = Date.now()
+      if (now - lastSaveRef.current >= 5000) {
+        lastSaveRef.current = now
+        saveBookmark(activeId, time, audioRef.current?.duration || 0)
+      }
+    }
+  }, [activeId])
+
+  // Save position before switching tracks or on pause
+  const saveCurrentPosition = useCallback(() => {
+    if (activeId && audioRef.current && audioRef.current.currentTime > 2) {
+      saveBookmark(activeId, audioRef.current.currentTime, audioRef.current.duration || 0)
+      const b = getBookmark(activeId)
+      if (b) setBookmarks(prev => ({ ...prev, [activeId]: b }))
+    }
+  }, [activeId])
 
   const playAudio = (item: AudioItem) => {
     if (activeId === item.id && isPlaying) {
       audioRef.current?.pause()
       setIsPlaying(false)
     } else {
+      // Save current position before switching
+      saveCurrentPosition()
       setActiveId(item.id)
       if (audioRef.current) {
+        const bm = getBookmark(item.id)
+        if (bm && bm.time > 2) {
+          pendingRestoreRef.current = item.id
+        }
         audioRef.current.src = item.audio_url
         audioRef.current.play()
         setIsPlaying(true)
       }
     }
   }
+
+  // Restore position when audio is ready
+  const handleCanPlay = useCallback(() => {
+    if (pendingRestoreRef.current && audioRef.current) {
+      const bm = getBookmark(pendingRestoreRef.current)
+      if (bm && bm.time > 2) {
+        audioRef.current.currentTime = bm.time
+        setCurrentTime(bm.time)
+        setResumeMessage(`Resuming from ${formatTime(bm.time)}`)
+        setTimeout(() => setResumeMessage(null), 3000)
+      }
+      pendingRestoreRef.current = null
+    }
+    setDuration(audioRef.current?.duration || 0)
+  }, [])
+
+  const handleEnded = useCallback(() => {
+    setIsPlaying(false)
+    if (activeId) {
+      clearBookmark(activeId)
+      setBookmarks(prev => {
+        const next = { ...prev }
+        delete next[activeId]
+        return next
+      })
+    }
+  }, [activeId])
+
+  const handlePause = useCallback(() => {
+    saveCurrentPosition()
+  }, [saveCurrentPosition])
 
   const skip = (seconds: number) => {
     if (audioRef.current) {
@@ -55,10 +175,14 @@ export default function Audio() {
     }
   }
 
-  const formatTime = (time: number) => {
-    const mins = Math.floor(time / 60)
-    const secs = Math.floor(time % 60)
-    return `${mins}:${secs.toString().padStart(2, '0')}`
+  const handleManualBookmark = () => {
+    if (activeId && audioRef.current) {
+      saveBookmark(activeId, audioRef.current.currentTime, audioRef.current.duration || 0)
+      const b = getBookmark(activeId)
+      if (b) setBookmarks(prev => ({ ...prev, [activeId]: b }))
+      setBookmarkSaved(true)
+      setTimeout(() => setBookmarkSaved(false), 2000)
+    }
   }
 
   const activeItem = audioContent.find(a => a.id === activeId)
@@ -71,11 +195,12 @@ export default function Audio() {
       <audio
         ref={audioRef}
         preload="metadata"
-        onTimeUpdate={() => setCurrentTime(audioRef.current?.currentTime || 0)}
+        onTimeUpdate={handleTimeUpdate}
         onLoadedMetadata={() => setDuration(audioRef.current?.duration || 0)}
         onDurationChange={() => setDuration(audioRef.current?.duration || 0)}
-        onCanPlay={() => setDuration(audioRef.current?.duration || 0)}
-        onEnded={() => setIsPlaying(false)}
+        onCanPlay={handleCanPlay}
+        onEnded={handleEnded}
+        onPause={handlePause}
       />
 
       {/* Now Playing Bar */}
@@ -102,8 +227,25 @@ export default function Audio() {
             </button>
             <div className="flex-1 min-w-0">
               <div className="font-medium truncate">{activeItem.title}</div>
-              <div className="text-sm text-text-muted">{formatTime(currentTime)} / {formatTime(duration)}</div>
+              <div className="text-sm text-text-muted flex items-center gap-2">
+                <span>{formatTime(currentTime)} / {formatTime(duration)}</span>
+                {resumeMessage && (
+                  <span className="text-atlas-400 text-xs animate-pulse">{resumeMessage}</span>
+                )}
+              </div>
             </div>
+            <button
+              onClick={handleManualBookmark}
+              className="p-2 hover:bg-surface-hover rounded-lg transition-colors relative"
+              title="Save position"
+            >
+              <Bookmark className={`w-4 h-4 ${bookmarkSaved ? 'text-atlas-400 fill-atlas-400' : ''}`} />
+              {bookmarkSaved && (
+                <span className="absolute -bottom-6 left-1/2 -translate-x-1/2 text-xs text-atlas-400 whitespace-nowrap">
+                  Position saved!
+                </span>
+              )}
+            </button>
           </div>
           <input
             type="range"
@@ -138,33 +280,52 @@ export default function Audio() {
           {audioContent.map((item) => {
             const date = new Date(item.created_at).toLocaleDateString()
             const isActive = activeId === item.id
+            const bm = bookmarks[item.id]
+            const progress = bm && bm.duration > 0 ? (bm.time / bm.duration) * 100 : 0
             return (
               <div
                 key={item.id}
-                className={`bg-surface border rounded-xl p-4 content-card flex items-center gap-4 cursor-pointer ${
+                className={`bg-surface border rounded-xl overflow-hidden content-card cursor-pointer ${
                   isActive ? 'border-atlas-500' : 'border-border'
                 }`}
                 onClick={() => playAudio(item)}
               >
-                <button className={`w-12 h-12 rounded-full flex items-center justify-center flex-shrink-0 transition-colors ${
-                  isActive ? 'bg-atlas-600' : 'bg-atlas-500 hover:bg-atlas-600'
-                }`}>
-                  {isActive && isPlaying ? (
-                    <Pause className="w-5 h-5 text-white" />
-                  ) : (
-                    <Play className="w-5 h-5 text-white ml-0.5" />
-                  )}
-                </button>
-                <div className="flex-1 min-w-0">
-                  <h3 className="font-medium truncate">{item.title}</h3>
-                  <div className="flex items-center gap-3 text-sm text-text-muted mt-1">
-                    <span className="tag-pill">{item.type}</span>
-                    <span className="flex items-center gap-1">
-                      <Calendar className="w-3 h-3" />
-                      {date}
-                    </span>
+                <div className="p-4 flex items-center gap-4">
+                  <button className={`w-12 h-12 rounded-full flex items-center justify-center flex-shrink-0 transition-colors ${
+                    isActive ? 'bg-atlas-600' : 'bg-atlas-500 hover:bg-atlas-600'
+                  }`}>
+                    {isActive && isPlaying ? (
+                      <Pause className="w-5 h-5 text-white" />
+                    ) : (
+                      <Play className="w-5 h-5 text-white ml-0.5" />
+                    )}
+                  </button>
+                  <div className="flex-1 min-w-0">
+                    <h3 className="font-medium truncate">{item.title}</h3>
+                    <div className="flex items-center gap-3 text-sm text-text-muted mt-1">
+                      <span className="tag-pill">{item.type}</span>
+                      <span className="flex items-center gap-1">
+                        <Calendar className="w-3 h-3" />
+                        {date}
+                      </span>
+                      {bm && (
+                        <span className="flex items-center gap-1 text-atlas-400">
+                          <Clock className="w-3 h-3" />
+                          {formatTime(bm.time)}
+                        </span>
+                      )}
+                    </div>
                   </div>
                 </div>
+                {/* Progress bar for bookmarked items */}
+                {bm && progress > 0 && (
+                  <div className="h-0.5 bg-border">
+                    <div
+                      className="h-full bg-atlas-500 opacity-60 transition-all"
+                      style={{ width: `${Math.min(progress, 100)}%` }}
+                    />
+                  </div>
+                )}
               </div>
             )
           })}

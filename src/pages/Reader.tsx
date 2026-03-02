@@ -1,8 +1,37 @@
-import { useEffect, useState, useRef } from 'react'
+import { useEffect, useState, useRef, useCallback } from 'react'
 import { useParams } from 'react-router-dom'
 import { Headphones, MessageCircle, Share, Bookmark, Loader2, SkipBack, SkipForward, Play, Pause, Volume2, ChevronLeft, ChevronRight } from 'lucide-react'
 import ReactMarkdown from 'react-markdown'
 import ChatPanel from '../components/ChatPanel'
+
+function getAudioBookmark(id: string): { time: number; duration: number } | null {
+  try {
+    const raw = localStorage.getItem(`atlas-audio-pos-${id}`)
+    if (!raw) return null
+    return JSON.parse(raw)
+  } catch {
+    return null
+  }
+}
+
+function saveAudioBookmark(id: string, time: number, duration: number) {
+  if (time < 2 || duration < 1) return
+  localStorage.setItem(`atlas-audio-pos-${id}`, JSON.stringify({
+    time,
+    duration,
+    updatedAt: Date.now()
+  }))
+}
+
+function clearAudioBookmark(id: string) {
+  localStorage.removeItem(`atlas-audio-pos-${id}`)
+}
+
+function formatAudioTime(time: number) {
+  const mins = Math.floor(time / 60)
+  const secs = Math.floor(time % 60)
+  return `${mins}:${secs.toString().padStart(2, '0')}`
+}
 
 interface ChatMessage {
   id: string
@@ -48,7 +77,11 @@ export default function Reader() {
   const [isPlaying, setIsPlaying] = useState(false)
   const [currentTime, setCurrentTime] = useState(0)
   const [duration, setDuration] = useState(0)
-  
+  const [resumeMessage, setResumeMessage] = useState<string | null>(null)
+  const [bookmarkSaved, setBookmarkSaved] = useState(false)
+  const lastSaveRef = useRef(0)
+  const pendingRestoreRef = useRef(false)
+
   // Story viewer state
   const [currentPage, setCurrentPage] = useState(0)
 
@@ -67,11 +100,27 @@ export default function Reader() {
           setContent(data.content)
           if (data.content.audio_url) {
             setAudioUrl(data.content.audio_url)
+            // Check for bookmark to restore
+            const bm = getAudioBookmark(data.content.id)
+            if (bm && bm.time > 2) {
+              pendingRestoreRef.current = true
+            }
           }
         }
         setLoading(false)
       })
       .catch(() => setLoading(false))
+  }, [id])
+
+  // Save position on beforeunload
+  useEffect(() => {
+    const handleUnload = () => {
+      if (id && audioRef.current && audioRef.current.currentTime > 2) {
+        saveAudioBookmark(id, audioRef.current.currentTime, audioRef.current.duration || 0)
+      }
+    }
+    window.addEventListener('beforeunload', handleUnload)
+    return () => window.removeEventListener('beforeunload', handleUnload)
   }, [id])
 
   // Audio controls
@@ -101,15 +150,59 @@ export default function Reader() {
     return `${mins}:${secs.toString().padStart(2, '0')}`
   }
 
-  const handleTimeUpdate = () => {
+  // Throttled auto-save on timeupdate
+  const handleTimeUpdate = useCallback(() => {
     if (audioRef.current) {
       setCurrentTime(audioRef.current.currentTime)
+      if (id) {
+        const now = Date.now()
+        if (now - lastSaveRef.current >= 5000) {
+          lastSaveRef.current = now
+          saveAudioBookmark(id, audioRef.current.currentTime, audioRef.current.duration || 0)
+        }
+      }
     }
-  }
+  }, [id])
 
   const handleLoadedMetadata = () => {
     if (audioRef.current) {
       setDuration(audioRef.current.duration)
+    }
+  }
+
+  // Restore position when audio is ready
+  const handleCanPlay = useCallback(() => {
+    if (audioRef.current && audioRef.current.duration) {
+      setDuration(audioRef.current.duration)
+    }
+    if (pendingRestoreRef.current && audioRef.current && id) {
+      const bm = getAudioBookmark(id)
+      if (bm && bm.time > 2) {
+        audioRef.current.currentTime = bm.time
+        setCurrentTime(bm.time)
+        setResumeMessage(`Resuming from ${formatAudioTime(bm.time)}`)
+        setTimeout(() => setResumeMessage(null), 3000)
+      }
+      pendingRestoreRef.current = false
+    }
+  }, [id])
+
+  const handleEnded = useCallback(() => {
+    setIsPlaying(false)
+    if (id) clearAudioBookmark(id)
+  }, [id])
+
+  const handlePause = useCallback(() => {
+    if (id && audioRef.current && audioRef.current.currentTime > 2) {
+      saveAudioBookmark(id, audioRef.current.currentTime, audioRef.current.duration || 0)
+    }
+  }, [id])
+
+  const handleManualBookmark = () => {
+    if (id && audioRef.current) {
+      saveAudioBookmark(id, audioRef.current.currentTime, audioRef.current.duration || 0)
+      setBookmarkSaved(true)
+      setTimeout(() => setBookmarkSaved(false), 2000)
     }
   }
 
@@ -235,12 +328,9 @@ export default function Reader() {
                 setDuration(audioRef.current.duration)
               }
             }}
-            onCanPlay={() => {
-              if (audioRef.current && audioRef.current.duration) {
-                setDuration(audioRef.current.duration)
-              }
-            }}
-            onEnded={() => setIsPlaying(false)}
+            onCanPlay={handleCanPlay}
+            onEnded={handleEnded}
+            onPause={handlePause}
           />
           
           <div className="flex items-center gap-4">
@@ -276,7 +366,12 @@ export default function Reader() {
             
             {/* Progress */}
             <div className="flex-1 flex items-center gap-3">
-              <span className="text-sm text-text-muted w-12">{formatTime(currentTime)}</span>
+              <div className="w-12 flex flex-col items-start">
+                <span className="text-sm text-text-muted">{formatTime(currentTime)}</span>
+                {resumeMessage && (
+                  <span className="text-[10px] text-atlas-400 animate-pulse whitespace-nowrap">{resumeMessage}</span>
+                )}
+              </div>
               <input
                 type="range"
                 min="0"
@@ -287,7 +382,21 @@ export default function Reader() {
               />
               <span className="text-sm text-text-muted w-12">{formatTime(duration)}</span>
             </div>
-            
+
+            {/* Manual bookmark */}
+            <button
+              onClick={handleManualBookmark}
+              className="p-2 hover:bg-surface-hover rounded-lg transition-colors relative"
+              title="Save position"
+            >
+              <Bookmark className={`w-5 h-5 ${bookmarkSaved ? 'text-atlas-400 fill-atlas-400' : 'text-text-muted'}`} />
+              {bookmarkSaved && (
+                <span className="absolute -bottom-6 left-1/2 -translate-x-1/2 text-xs text-atlas-400 whitespace-nowrap">
+                  Position saved!
+                </span>
+              )}
+            </button>
+
             <Volume2 className="w-5 h-5 text-text-muted" />
           </div>
         </div>
