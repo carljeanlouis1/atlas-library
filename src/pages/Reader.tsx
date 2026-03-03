@@ -333,45 +333,10 @@ export default function Reader() {
             onPause={handlePause}
           />
           
-          <div className="flex items-center gap-4">
-            {/* Skip back 10s */}
-            <button
-              onClick={() => skip(-10)}
-              className="p-2 hover:bg-surface-hover rounded-lg transition-colors"
-              title="Back 10 seconds"
-            >
-              <SkipBack className="w-5 h-5" />
-            </button>
-            
-            {/* Play/Pause */}
-            <button
-              onClick={togglePlay}
-              className="w-12 h-12 rounded-full bg-atlas-500 hover:bg-atlas-600 flex items-center justify-center transition-colors"
-            >
-              {isPlaying ? (
-                <Pause className="w-5 h-5 text-white" />
-              ) : (
-                <Play className="w-5 h-5 text-white ml-0.5" />
-              )}
-            </button>
-            
-            {/* Skip forward 10s */}
-            <button
-              onClick={() => skip(10)}
-              className="p-2 hover:bg-surface-hover rounded-lg transition-colors"
-              title="Forward 10 seconds"
-            >
-              <SkipForward className="w-5 h-5" />
-            </button>
-            
-            {/* Progress */}
-            <div className="flex-1 flex items-center gap-3">
-              <div className="w-12 flex flex-col items-start">
-                <span className="text-sm text-text-muted">{formatTime(currentTime)}</span>
-                {resumeMessage && (
-                  <span className="text-[10px] text-atlas-400 animate-pulse whitespace-nowrap">{resumeMessage}</span>
-                )}
-              </div>
+          <div className="space-y-2">
+            {/* Seek slider — full width, own row */}
+            <div className="flex items-center gap-2">
+              <span className="text-xs text-text-muted w-10 text-right tabular-nums">{formatTime(currentTime)}</span>
               <input
                 type="range"
                 min="0"
@@ -380,24 +345,50 @@ export default function Reader() {
                 onChange={handleSeek}
                 className="audio-slider flex-1"
               />
-              <span className="text-sm text-text-muted w-12">{formatTime(duration)}</span>
+              <span className="text-xs text-text-muted w-10 tabular-nums">{formatTime(duration)}</span>
             </div>
-
-            {/* Manual bookmark */}
-            <button
-              onClick={handleManualBookmark}
-              className="p-2 hover:bg-surface-hover rounded-lg transition-colors relative"
-              title="Save position"
-            >
-              <Bookmark className={`w-5 h-5 ${bookmarkSaved ? 'text-atlas-400 fill-atlas-400' : 'text-text-muted'}`} />
-              {bookmarkSaved && (
-                <span className="absolute -bottom-6 left-1/2 -translate-x-1/2 text-xs text-atlas-400 whitespace-nowrap">
-                  Position saved!
-                </span>
-              )}
-            </button>
-
-            <Volume2 className="w-5 h-5 text-text-muted" />
+            {/* Controls row */}
+            <div className="flex items-center justify-center gap-3">
+              <button
+                onClick={() => skip(-10)}
+                className="p-2 hover:bg-surface-hover rounded-lg transition-colors"
+                title="Back 10 seconds"
+              >
+                <SkipBack className="w-5 h-5" />
+              </button>
+              <button
+                onClick={togglePlay}
+                className="w-12 h-12 rounded-full bg-atlas-500 hover:bg-atlas-600 flex items-center justify-center transition-colors"
+              >
+                {isPlaying ? (
+                  <Pause className="w-5 h-5 text-white" />
+                ) : (
+                  <Play className="w-5 h-5 text-white ml-0.5" />
+                )}
+              </button>
+              <button
+                onClick={() => skip(10)}
+                className="p-2 hover:bg-surface-hover rounded-lg transition-colors"
+                title="Forward 10 seconds"
+              >
+                <SkipForward className="w-5 h-5" />
+              </button>
+              <button
+                onClick={handleManualBookmark}
+                className="p-2 hover:bg-surface-hover rounded-lg transition-colors"
+                title="Save position"
+              >
+                <Bookmark className={`w-5 h-5 ${bookmarkSaved ? 'text-atlas-400 fill-atlas-400' : 'text-text-muted'}`} />
+              </button>
+              <Volume2 className="w-5 h-5 text-text-muted" />
+            </div>
+            {/* Resume / bookmark feedback */}
+            {(resumeMessage || bookmarkSaved) && (
+              <div className="text-center text-xs text-atlas-400">
+                {resumeMessage && <span className="animate-pulse">{resumeMessage}</span>}
+                {bookmarkSaved && <span>Position saved!</span>}
+              </div>
+            )}
           </div>
         </div>
       )}
