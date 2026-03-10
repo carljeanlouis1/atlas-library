@@ -524,6 +524,50 @@ export default function Reader() {
             ))}
           </div>
         </div>
+      ) : content.type === 'song' ? (
+        <div className="song-viewer space-y-6">
+          {/* Song metadata */}
+          <div className="flex flex-wrap gap-3 items-center">
+            {content.metadata?.artist_style && (
+              <span className="px-3 py-1 bg-purple-500/20 text-purple-300 rounded-full text-sm font-medium">
+                🎤 {String(content.metadata.artist_style)}
+              </span>
+            )}
+            {content.metadata?.genre && (
+              <span className="px-3 py-1 bg-blue-500/20 text-blue-300 rounded-full text-sm font-medium">
+                🎵 {String(content.metadata.genre)}
+              </span>
+            )}
+            {content.metadata?.duration && (
+              <span className="px-3 py-1 bg-green-500/20 text-green-300 rounded-full text-sm font-medium">
+                ⏱ {String(content.metadata.duration)}
+              </span>
+            )}
+          </div>
+
+          {/* Lyrics */}
+          {content.metadata?.lyrics && (
+            <div className="bg-surface border border-border rounded-xl p-6">
+              <h3 className="text-lg font-semibold text-atlas-400 mb-4 flex items-center gap-2">
+                📝 Lyrics
+              </h3>
+              <div className="text-text-secondary whitespace-pre-line leading-relaxed font-mono text-sm">
+                {String(content.metadata.lyrics).split('\n').map((line: string, i: number) => (
+                  <div key={i} className={line.startsWith('[') ? 'text-atlas-400 font-bold mt-4 mb-1' : line.trim() === '' ? 'h-2' : ''}>
+                    {line}
+                  </div>
+                ))}
+              </div>
+            </div>
+          )}
+
+          {/* Song content/description if any */}
+          {content.content && (
+            <article className="prose-reading prose prose-invert max-w-none" style={{ fontFamily: "'Times New Roman', Times, Georgia, serif" }}>
+              <ReactMarkdown>{content.content}</ReactMarkdown>
+            </article>
+          )}
+        </div>
       ) : (
         <article className="prose-reading prose prose-invert max-w-none" style={{ fontFamily: "'Times New Roman', Times, Georgia, serif" }}>
           <ReactMarkdown>{content.content || ''}</ReactMarkdown>
