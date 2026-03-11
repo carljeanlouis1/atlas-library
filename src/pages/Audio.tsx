@@ -73,7 +73,7 @@ export default function Audio() {
       .then(res => res.json())
       .then(data => {
         if (data.success) {
-          const withAudio = data.content.filter((item: AudioItem) => item.audio_url)
+          const withAudio = data.content.filter((item: AudioItem) => item.audio_url && item.type !== 'song')
           setAudioContent(withAudio)
           refreshBookmarks(withAudio)
         }

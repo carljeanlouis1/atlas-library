@@ -97,11 +97,16 @@ export default function Reader() {
       .then(res => res.json())
       .then(data => {
         if (data.success) {
-          setContent(data.content)
-          if (data.content.audio_url) {
-            setAudioUrl(data.content.audio_url)
+          // Ensure metadata is parsed (may come as JSON string from D1)
+          const item = data.content
+          if (item.metadata && typeof item.metadata === 'string') {
+            try { item.metadata = JSON.parse(item.metadata) } catch(e) {}
+          }
+          setContent(item)
+          if (item.audio_url) {
+            setAudioUrl(item.audio_url)
             // Check for bookmark to restore
-            const bm = getAudioBookmark(data.content.id)
+            const bm = getAudioBookmark(item.id)
             if (bm && bm.time > 2) {
               pendingRestoreRef.current = true
             }
@@ -528,17 +533,17 @@ export default function Reader() {
         <div className="song-viewer space-y-6">
           {/* Song metadata */}
           <div className="flex flex-wrap gap-3 items-center">
-            {content.metadata?.artist_style && (
+            {!!content.metadata?.artist_style && (
               <span className="px-3 py-1 bg-purple-500/20 text-purple-300 rounded-full text-sm font-medium">
                 🎤 {String(content.metadata.artist_style)}
               </span>
             )}
-            {content.metadata?.genre && (
+            {!!content.metadata?.genre && (
               <span className="px-3 py-1 bg-blue-500/20 text-blue-300 rounded-full text-sm font-medium">
                 🎵 {String(content.metadata.genre)}
               </span>
             )}
-            {content.metadata?.duration && (
+            {!!content.metadata?.duration && (
               <span className="px-3 py-1 bg-green-500/20 text-green-300 rounded-full text-sm font-medium">
                 ⏱ {String(content.metadata.duration)}
               </span>
@@ -546,7 +551,7 @@ export default function Reader() {
           </div>
 
           {/* Lyrics */}
-          {content.metadata?.lyrics && (
+          {!!content.metadata?.lyrics && (
             <div className="bg-surface border border-border rounded-xl p-6">
               <h3 className="text-lg font-semibold text-atlas-400 mb-4 flex items-center gap-2">
                 📝 Lyrics
