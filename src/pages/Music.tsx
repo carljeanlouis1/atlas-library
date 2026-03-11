@@ -31,6 +31,7 @@ export default function Music() {
   const [loading, setLoading] = useState(true)
   const [activeId, setActiveId] = useState<string | null>(null)
   const [isPlaying, setIsPlaying] = useState(false)
+  const [showLyrics, setShowLyrics] = useState(false)
   const [currentTime, setCurrentTime] = useState(0)
   const [duration, setDuration] = useState(0)
   const audioRef = useRef<HTMLAudioElement>(null)
@@ -192,20 +193,36 @@ export default function Music() {
         </div>
       )}
 
-      {/* Lyrics panel */}
+      {/* Lyrics panel — toggleable */}
       {activeSong?.metadata?.lyrics && (
-        <div className="mt-8 bg-surface border border-border rounded-xl p-6">
-          <h3 className="text-lg font-semibold text-purple-400 mb-4">Lyrics — {activeSong.title}</h3>
-          <div className="text-text-secondary whitespace-pre-line leading-relaxed font-mono text-sm">
-            {activeSong.metadata.lyrics.split('\n').map((line: string, i: number) => (
-              <div key={i} className={
-                line.startsWith('[') ? 'text-purple-400 font-bold mt-4 mb-1' :
-                line.trim() === '' ? 'h-2' : ''
-              }>
-                {line}
+        <div className="mt-6 mb-4">
+          <button
+            onClick={() => setShowLyrics(!showLyrics)}
+            className="flex items-center gap-2 px-4 py-2 bg-purple-500/20 hover:bg-purple-500/30 text-purple-300 rounded-lg transition-colors mb-3"
+          >
+            <span>{showLyrics ? '🎵 Hide Lyrics' : '📝 Show Lyrics'}</span>
+            <span className="text-xs text-purple-400/60">— {activeSong.title}</span>
+          </button>
+          {showLyrics && (
+            <div className="bg-surface border border-border rounded-xl p-6 max-h-[60vh] overflow-y-auto">
+              <div className="flex items-center justify-between mb-4">
+                <h3 className="text-lg font-semibold text-purple-400">Lyrics — {activeSong.title}</h3>
+                {activeSong.metadata?.artist_style && (
+                  <span className="text-sm text-text-muted">{activeSong.metadata.artist_style} style</span>
+                )}
               </div>
-            ))}
-          </div>
+              <div className="text-text-secondary whitespace-pre-line leading-relaxed font-mono text-sm">
+                {activeSong.metadata.lyrics.split('\n').map((line: string, i: number) => (
+                  <div key={i} className={
+                    line.startsWith('[') ? 'text-purple-400 font-bold mt-4 mb-1' :
+                    line.trim() === '' ? 'h-2' : ''
+                  }>
+                    {line}
+                  </div>
+                ))}
+              </div>
+            </div>
+          )}
         </div>
       )}
 
