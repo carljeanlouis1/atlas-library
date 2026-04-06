@@ -1,5 +1,6 @@
-import { useEffect, useState, useRef, useCallback } from 'react'
-import { Play, Pause, Clock, Calendar, SkipBack, SkipForward, Loader2, Bookmark } from 'lucide-react'
+import { useEffect, useState, useCallback } from 'react'
+import { Play, Pause, Clock, Calendar, Loader2, ListPlus, Check } from 'lucide-react'
+import { useAudioQueue } from '../contexts/AudioQueueContext'
 
 interface AudioItem {
   id: string
@@ -25,19 +26,6 @@ function getBookmark(id: string): BookmarkData | null {
   }
 }
 
-function saveBookmark(id: string, time: number, duration: number) {
-  if (time < 2 || duration < 1) return
-  localStorage.setItem(`atlas-audio-pos-${id}`, JSON.stringify({
-    time,
-    duration,
-    updatedAt: Date.now()
-  }))
-}
-
-function clearBookmark(id: string) {
-  localStorage.removeItem(`atlas-audio-pos-${id}`)
-}
-
 function formatTime(time: number) {
   const mins = Math.floor(time / 60)
   const secs = Math.floor(time % 60)
@@ -47,18 +35,11 @@ function formatTime(time: number) {
 export default function Audio() {
   const [audioContent, setAudioContent] = useState<AudioItem[]>([])
   const [loading, setLoading] = useState(true)
-  const [activeId, setActiveId] = useState<string | null>(null)
-  const [isPlaying, setIsPlaying] = useState(false)
-  const [currentTime, setCurrentTime] = useState(0)
-  const [duration, setDuration] = useState(0)
-  const [resumeMessage, setResumeMessage] = useState<string | null>(null)
-  const [bookmarkSaved, setBookmarkSaved] = useState(false)
   const [bookmarks, setBookmarks] = useState<Record<string, BookmarkData>>({})
-  const audioRef = useRef<HTMLAudioElement>(null)
-  const lastSaveRef = useRef(0)
-  const pendingRestoreRef = useRef<string | null>(null)
+  const [justQueued, setJustQueued] = useState<Set<string>>(new Set())
 
-  // Load all bookmarks on mount
+  const { currentTrack, isPlaying, playTrack, togglePlay, addToQueue } = useAudioQueue()
+
   const refreshBookmarks = useCallback((items: AudioItem[]) => {
     const bm: Record<string, BookmarkData> = {}
     for (const item of items) {
@@ -82,195 +63,38 @@ export default function Audio() {
       .catch(() => setLoading(false))
   }, [refreshBookmarks])
 
-  // Save position on beforeunload
-  useEffect(() => {
-    const handleUnload = () => {
-      if (activeId && audioRef.current) {
-        saveBookmark(activeId, audioRef.current.currentTime, audioRef.current.duration || 0)
-      }
-    }
-    window.addEventListener('beforeunload', handleUnload)
-    return () => window.removeEventListener('beforeunload', handleUnload)
-  }, [activeId])
-
-  // Throttled auto-save on timeupdate
-  const handleTimeUpdate = useCallback(() => {
-    const time = audioRef.current?.currentTime || 0
-    setCurrentTime(time)
-    if (activeId) {
-      const now = Date.now()
-      if (now - lastSaveRef.current >= 5000) {
-        lastSaveRef.current = now
-        saveBookmark(activeId, time, audioRef.current?.duration || 0)
-      }
-    }
-  }, [activeId])
-
-  // Save position before switching tracks or on pause
-  const saveCurrentPosition = useCallback(() => {
-    if (activeId && audioRef.current && audioRef.current.currentTime > 2) {
-      saveBookmark(activeId, audioRef.current.currentTime, audioRef.current.duration || 0)
-      const b = getBookmark(activeId)
-      if (b) setBookmarks(prev => ({ ...prev, [activeId]: b }))
-    }
-  }, [activeId])
-
-  const playAudio = (item: AudioItem) => {
-    if (activeId === item.id && isPlaying) {
-      audioRef.current?.pause()
-      setIsPlaying(false)
+  const handlePlay = (item: AudioItem) => {
+    if (currentTrack?.id === item.id) {
+      togglePlay()
     } else {
-      // Save current position before switching
-      saveCurrentPosition()
-      setActiveId(item.id)
-      if (audioRef.current) {
-        const bm = getBookmark(item.id)
-        if (bm && bm.time > 2) {
-          pendingRestoreRef.current = item.id
-        }
-        audioRef.current.src = item.audio_url
-        audioRef.current.play()
-        setIsPlaying(true)
-      }
+      playTrack({ id: item.id, title: item.title, audio_url: item.audio_url, type: item.type })
     }
   }
 
-  // Restore position when audio is ready
-  const handleCanPlay = useCallback(() => {
-    if (pendingRestoreRef.current && audioRef.current) {
-      const bm = getBookmark(pendingRestoreRef.current)
-      if (bm && bm.time > 2) {
-        audioRef.current.currentTime = bm.time
-        setCurrentTime(bm.time)
-        setResumeMessage(`Resuming from ${formatTime(bm.time)}`)
-        setTimeout(() => setResumeMessage(null), 3000)
-      }
-      pendingRestoreRef.current = null
-    }
-    setDuration(audioRef.current?.duration || 0)
-  }, [])
-
-  const handleEnded = useCallback(() => {
-    setIsPlaying(false)
-    if (activeId) {
-      clearBookmark(activeId)
-      setBookmarks(prev => {
-        const next = { ...prev }
-        delete next[activeId]
+  const handleAddToQueue = (e: React.MouseEvent, item: AudioItem) => {
+    e.stopPropagation()
+    addToQueue({ id: item.id, title: item.title, audio_url: item.audio_url, type: item.type })
+    setJustQueued(prev => new Set(prev).add(item.id))
+    setTimeout(() => {
+      setJustQueued(prev => {
+        const next = new Set(prev)
+        next.delete(item.id)
         return next
       })
-    }
-  }, [activeId])
-
-  const handlePause = useCallback(() => {
-    saveCurrentPosition()
-  }, [saveCurrentPosition])
-
-  const skip = (seconds: number) => {
-    if (audioRef.current) {
-      const audioDuration = audioRef.current.duration || 0
-      if (audioDuration > 0) {
-        audioRef.current.currentTime = Math.max(0, Math.min(audioRef.current.currentTime + seconds, audioDuration))
-      }
-    }
+    }, 2000)
   }
-
-  const handleManualBookmark = () => {
-    if (activeId && audioRef.current) {
-      saveBookmark(activeId, audioRef.current.currentTime, audioRef.current.duration || 0)
-      const b = getBookmark(activeId)
-      if (b) setBookmarks(prev => ({ ...prev, [activeId]: b }))
-      setBookmarkSaved(true)
-      setTimeout(() => setBookmarkSaved(false), 2000)
-    }
-  }
-
-  const activeItem = audioContent.find(a => a.id === activeId)
 
   return (
     <div className="max-w-4xl mx-auto px-4 py-8">
-      <h1 className="text-2xl font-bold mb-6">Audio Archive</h1>
-
-      {/* Hidden audio element */}
-      <audio
-        ref={audioRef}
-        preload="metadata"
-        onTimeUpdate={handleTimeUpdate}
-        onLoadedMetadata={() => setDuration(audioRef.current?.duration || 0)}
-        onDurationChange={() => setDuration(audioRef.current?.duration || 0)}
-        onCanPlay={handleCanPlay}
-        onEnded={handleEnded}
-        onPause={handlePause}
-      />
-
-      {/* Now Playing Bar */}
-      {activeItem && (
-        <div className="bg-surface border border-border rounded-xl p-3 sm:p-4 mb-6 sticky top-16 sm:top-20 z-40">
-          {/* Title row */}
-          <div className="flex items-center gap-2 mb-2">
-            <div className="flex-1 min-w-0">
-              <div className="font-medium text-sm sm:text-base truncate">{activeItem.title}</div>
-            </div>
-            <button
-              onClick={handleManualBookmark}
-              className="p-1.5 hover:bg-surface-hover rounded-lg transition-colors flex-shrink-0"
-              title="Save position"
-            >
-              <Bookmark className={`w-4 h-4 ${bookmarkSaved ? 'text-atlas-400 fill-atlas-400' : 'text-text-muted'}`} />
-            </button>
+      <div className="flex items-center justify-between mb-6">
+        <h1 className="text-2xl font-bold">Audio Archive</h1>
+        {currentTrack && (
+          <div className="text-sm text-text-muted hidden sm:flex items-center gap-2">
+            <span className="w-2 h-2 rounded-full bg-atlas-400 animate-pulse" />
+            Now playing via global player
           </div>
-          {/* Seek slider — always visible */}
-          <div className="mb-2">
-            <input
-              type="range"
-              min="0"
-              max={duration || 100}
-              value={currentTime}
-              onChange={(e) => {
-                const time = parseFloat(e.target.value)
-                if (audioRef.current) {
-                  const audioDuration = audioRef.current.duration || 0
-                  if (audioDuration > 0 && time >= 0 && time <= audioDuration) {
-                    audioRef.current.currentTime = time
-                    setCurrentTime(time)
-                  }
-                }
-              }}
-              className="audio-slider w-full"
-            />
-          </div>
-          {/* Controls row */}
-          <div className="flex items-center gap-2 sm:gap-3">
-            <button
-              onClick={() => skip(-10)}
-              className="p-2 hover:bg-surface-hover rounded-lg"
-            >
-              <SkipBack className="w-4 h-4" />
-            </button>
-            <button
-              onClick={() => playAudio(activeItem)}
-              className="w-10 h-10 rounded-full bg-atlas-500 hover:bg-atlas-600 flex items-center justify-center flex-shrink-0"
-            >
-              {isPlaying ? <Pause className="w-4 h-4 text-white" /> : <Play className="w-4 h-4 text-white ml-0.5" />}
-            </button>
-            <button
-              onClick={() => skip(10)}
-              className="p-2 hover:bg-surface-hover rounded-lg"
-            >
-              <SkipForward className="w-4 h-4" />
-            </button>
-            <div className="flex-1 text-sm text-text-muted flex items-center gap-2">
-              <span>{formatTime(currentTime)} / {formatTime(duration)}</span>
-              {resumeMessage && (
-                <span className="text-atlas-400 text-xs animate-pulse">{resumeMessage}</span>
-              )}
-              {bookmarkSaved && (
-                <span className="text-atlas-400 text-xs">Saved!</span>
-              )}
-            </div>
-          </div>
-        </div>
-      )}
+        )}
+      </div>
 
       {loading ? (
         <div className="flex items-center justify-center py-12">
@@ -284,22 +108,25 @@ export default function Audio() {
         <div className="space-y-3">
           {audioContent.map((item) => {
             const date = new Date(item.created_at).toLocaleDateString()
-            const isActive = activeId === item.id
+            const isActive = currentTrack?.id === item.id
+            const isCurrentlyPlaying = isActive && isPlaying
             const bm = bookmarks[item.id]
             const progress = bm && bm.duration > 0 ? (bm.time / bm.duration) * 100 : 0
+            const queued = justQueued.has(item.id)
+
             return (
               <div
                 key={item.id}
                 className={`bg-surface border rounded-xl overflow-hidden content-card cursor-pointer ${
                   isActive ? 'border-atlas-500' : 'border-border'
                 }`}
-                onClick={() => playAudio(item)}
+                onClick={() => handlePlay(item)}
               >
                 <div className="p-4 flex items-center gap-4">
                   <button className={`w-12 h-12 rounded-full flex items-center justify-center flex-shrink-0 transition-colors ${
                     isActive ? 'bg-atlas-600' : 'bg-atlas-500 hover:bg-atlas-600'
                   }`}>
-                    {isActive && isPlaying ? (
+                    {isCurrentlyPlaying ? (
                       <Pause className="w-5 h-5 text-white" />
                     ) : (
                       <Play className="w-5 h-5 text-white ml-0.5" />
@@ -321,6 +148,22 @@ export default function Audio() {
                       )}
                     </div>
                   </div>
+                  {/* Add to queue button */}
+                  <button
+                    onClick={(e) => handleAddToQueue(e, item)}
+                    className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-medium flex-shrink-0 transition-colors ${
+                      queued
+                        ? 'bg-green-500/20 text-green-400'
+                        : 'bg-surface-hover hover:bg-atlas-500/20 hover:text-atlas-400 text-text-muted'
+                    }`}
+                    title={queued ? 'Added to queue' : 'Add to queue'}
+                  >
+                    {queued ? (
+                      <><Check className="w-3.5 h-3.5" /> Added</>
+                    ) : (
+                      <><ListPlus className="w-3.5 h-3.5" /> Queue</>
+                    )}
+                  </button>
                 </div>
                 {/* Progress bar for bookmarked items */}
                 {bm && progress > 0 && (

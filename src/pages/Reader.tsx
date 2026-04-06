@@ -1,8 +1,9 @@
 import { useEffect, useState, useRef, useCallback } from 'react'
 import { useParams } from 'react-router-dom'
-import { Headphones, MessageCircle, Share, Bookmark, Loader2, SkipBack, SkipForward, Play, Pause, Volume2, ChevronLeft, ChevronRight } from 'lucide-react'
+import { Headphones, MessageCircle, Share, Bookmark, Loader2, SkipBack, SkipForward, Play, Pause, Volume2, ChevronLeft, ChevronRight, ListPlus, Check } from 'lucide-react'
 import ReactMarkdown from 'react-markdown'
 import ChatPanel from '../components/ChatPanel'
+import { useAudioQueue } from '../contexts/AudioQueueContext'
 
 function getAudioBookmark(id: string): { time: number; duration: number } | null {
   try {
@@ -71,6 +72,9 @@ export default function Reader() {
   const [generatingArtwork, setGeneratingArtwork] = useState(false)
   const [audioUrl, setAudioUrl] = useState<string | null>(null)
   const [showChat, setShowChat] = useState(false)
+  const [justQueued, setJustQueued] = useState(false)
+
+  const { addToQueue } = useAudioQueue()
   
   // Audio player state
   const audioRef = useRef<HTMLAudioElement>(null)
@@ -248,6 +252,13 @@ export default function Reader() {
       console.error('TTS generation failed:', err)
     }
     setGenerating(false)
+  }
+
+  const handleAddToQueue = () => {
+    if (!content || !audioUrl) return
+    addToQueue({ id: content.id, title: content.title, audio_url: audioUrl, type: content.type })
+    setJustQueued(true)
+    setTimeout(() => setJustQueued(false), 2000)
   }
 
   // Generate artwork using Nano Banana Pro (Gemini)
@@ -434,7 +445,20 @@ export default function Reader() {
             Audio generated!
           </span>
         )}
-        <button 
+        {audioUrl && (
+          <button
+            onClick={handleAddToQueue}
+            className={`flex items-center gap-2 px-4 py-2 rounded-lg border transition-colors ${
+              justQueued
+                ? 'bg-green-500/20 text-green-400 border-green-500/30'
+                : 'bg-surface hover:bg-surface-hover border-border'
+            }`}
+          >
+            {justQueued ? <Check className="w-4 h-4" /> : <ListPlus className="w-4 h-4" />}
+            {justQueued ? 'Added to queue' : 'Add to queue'}
+          </button>
+        )}
+        <button
           onClick={() => setShowChat(true)}
           className="flex items-center gap-2 px-4 py-2 bg-surface hover:bg-surface-hover border border-border rounded-lg transition-colors"
         >
