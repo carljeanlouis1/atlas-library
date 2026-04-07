@@ -42,9 +42,8 @@ export const onRequestGet: PagesFunction<Env> = async (context) => {
   }
 
   if (search) {
-    conditions.push('(title LIKE ? OR content LIKE ?)');
-    const searchTerm = `%${search}%`;
-    params.push(searchTerm, searchTerm);
+    conditions.push('title LIKE ?');
+    params.push(`%${search}%`);
   }
 
   if (conditions.length > 0) {
