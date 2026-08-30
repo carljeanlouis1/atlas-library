@@ -1,264 +1,272 @@
-import { useEffect, useState, useCallback } from 'react'
+import { useEffect, useMemo, useState } from 'react'
 import { Link } from 'react-router-dom'
-import { BookOpen, Headphones, FileText, Gavel, Loader2, Image, Search, LayoutGrid, List, X } from 'lucide-react'
+import { Play, Pause, Loader2, Search, X, BookOpen } from 'lucide-react'
+import {
+  fetchLibrary, LibraryItem, Bookmark, readAllBookmarks, typeLabel, runLength,
+} from '../lib/library'
+import {
+  formatFullDate, formatClock, monthKey, formatMonthHeading, dayKey, estimateReadMinutes, formatApprox,
+} from '../lib/format'
+import { useAudioQueue } from '../contexts/AudioQueueContext'
+import ArchiveDial from '../components/ArchiveDial'
+import ArchiveRow from '../components/ArchiveRow'
+import DownloadButton from '../components/DownloadButton'
 
-interface ContentItem {
-  id: string
-  type: 'text' | 'audio' | 'debate' | 'brief' | 'story'
-  title: string
-  content?: string
-  audio_url?: string
-  image_url?: string
-  metadata?: string
-  created_at: string
-}
-
-const typeIcons = {
-  text: BookOpen,
-  audio: Headphones,
-  brief: FileText,
-  debate: Gavel,
-  story: Image,
-}
-
-const typeLabels: Record<string, string> = {
-  text: 'Story',
-  audio: 'Audio',
-  brief: 'Brief',
-  debate: 'Debate',
-  story: 'Visual',
-}
+const FILTERS: { id: string; label: string; types: string[] }[] = [
+  { id: 'brief', label: 'Briefs', types: ['brief'] },
+  { id: 'audio', label: 'Recordings', types: ['audio'] },
+  { id: 'text', label: 'Essays', types: ['text', 'article'] },
+  { id: 'song', label: 'Songs', types: ['song'] },
+  { id: 'story', label: 'Visual', types: ['story'] },
+]
 
 export default function Home() {
-  const [content, setContent] = useState<ContentItem[]>([])
+  const [items, setItems] = useState<LibraryItem[]>([])
+  const [bookmarks, setBookmarks] = useState<Record<string, Bookmark>>({})
   const [loading, setLoading] = useState(true)
-  const [counts, setCounts] = useState({ text: 0, audio: 0, brief: 0, debate: 0, story: 0 })
-  const [selectedType, setSelectedType] = useState<string | null>(null)
-  const [searchQuery, setSearchQuery] = useState('')
-  const [debouncedSearch, setDebouncedSearch] = useState('')
-  const [viewMode, setViewMode] = useState<'grid' | 'list'>(() => {
-    return (localStorage.getItem('atlas-view-mode') as 'grid' | 'list') || 'grid'
-  })
-  const [searching, setSearching] = useState(false)
-  const [allContent, setAllContent] = useState<ContentItem[]>([])
+  const [failed, setFailed] = useState(false)
+  const [filter, setFilter] = useState<string | null>(null)
+  const [query, setQuery] = useState('')
+  const [activeDay, setActiveDay] = useState<string | null>(null)
 
-  // Load all content on mount
+  const { currentTrack, isPlaying, playTrack, togglePlay, addToQueue, queue } = useAudioQueue()
+
   useEffect(() => {
-    fetch('/api/content?limit=100')
-      .then(res => res.json())
-      .then(data => {
-        if (data.success) {
-          setAllContent(data.content)
-          setContent(data.content)
-          const c = { text: 0, audio: 0, brief: 0, debate: 0, story: 0 }
-          data.content.forEach((item: ContentItem) => {
-            if (c[item.type as keyof typeof c] !== undefined) c[item.type as keyof typeof c]++
-          })
-          setCounts(c)
-        }
-        setLoading(false)
+    let cancelled = false
+    fetchLibrary()
+      .then((all) => {
+        if (cancelled) return
+        setItems(all)
+        setBookmarks(readAllBookmarks(all))
       })
-      .catch(() => setLoading(false))
+      .catch(() => !cancelled && setFailed(true))
+      .finally(() => !cancelled && setLoading(false))
+    return () => {
+      cancelled = true
+    }
   }, [])
 
-  // Debounce search
-  useEffect(() => {
-    const timer = setTimeout(() => setDebouncedSearch(searchQuery), 300)
-    return () => clearTimeout(timer)
-  }, [searchQuery])
+  const counts = useMemo(() => {
+    const out: Record<string, number> = {}
+    for (const item of items) out[item.type] = (out[item.type] ?? 0) + 1
+    return out
+  }, [items])
 
-  // Search effect
-  useEffect(() => {
-    if (!debouncedSearch.trim()) {
-      setContent(allContent)
-      setSearching(false)
+  const latest = items[0]
+
+  const visible = useMemo(() => {
+    const q = query.trim().toLowerCase()
+    const types = FILTERS.find((f) => f.id === filter)?.types
+    return items.filter((item) => {
+      if (latest && item.id === latest.id && !filter && !q && !activeDay) return false
+      if (types && !types.includes(item.type)) return false
+      if (activeDay && dayKey(item.created_at) !== activeDay) return false
+      if (q && !item.title.toLowerCase().includes(q)) return false
+      return true
+    })
+  }, [items, filter, query, activeDay, latest])
+
+  const months = useMemo(() => {
+    const groups: { key: string; heading: string; rows: LibraryItem[] }[] = []
+    for (const item of visible) {
+      const key = monthKey(item.created_at)
+      const last = groups[groups.length - 1]
+      if (last && last.key === key) last.rows.push(item)
+      else groups.push({ key, heading: formatMonthHeading(item.created_at), rows: [item] })
+    }
+    return groups
+  }, [visible])
+
+  const handlePlay = (item: LibraryItem) => {
+    if (!item.audio_url) return
+    if (currentTrack?.id === item.id) {
+      togglePlay()
       return
     }
-    setSearching(true)
-    fetch(`/api/content?limit=100&search=${encodeURIComponent(debouncedSearch)}`)
-      .then(res => res.json())
-      .then(data => {
-        if (data.success) setContent(data.content)
-        setSearching(false)
-      })
-      .catch(() => setSearching(false))
-  }, [debouncedSearch, allContent])
-
-  // Persist view mode
-  const toggleView = useCallback((mode: 'grid' | 'list') => {
-    setViewMode(mode)
-    localStorage.setItem('atlas-view-mode', mode)
-  }, [])
-
-  const filtered = content.filter(item => !selectedType || item.type === selectedType)
-
-  const contentTypes = [
-    { type: 'text' as const, icon: BookOpen, label: 'Stories', count: counts.text },
-    { type: 'audio' as const, icon: Headphones, label: 'Audio', count: counts.audio },
-    { type: 'brief' as const, icon: FileText, label: 'Briefs', count: counts.brief },
-    { type: 'debate' as const, icon: Gavel, label: 'Debates', count: counts.debate },
-    { type: 'story' as const, icon: Image, label: 'Visual', count: counts.story },
-  ]
-
-  const formatDate = (dateStr: string) => {
-    const d = new Date(dateStr)
-    const now = new Date()
-    const diffMs = now.getTime() - d.getTime()
-    const diffDays = Math.floor(diffMs / (1000 * 60 * 60 * 24))
-    if (diffDays === 0) return 'Today'
-    if (diffDays === 1) return 'Yesterday'
-    if (diffDays < 7) return `${diffDays}d ago`
-    return d.toLocaleDateString('en-US', { month: 'short', day: 'numeric' })
+    playTrack({
+      id: item.id,
+      title: item.title,
+      audio_url: item.audio_url,
+      type: item.type,
+      image_url: item.image_url,
+    })
   }
 
+  const handleQueue = (item: LibraryItem) => {
+    if (!item.audio_url) return
+    addToQueue({
+      id: item.id,
+      title: item.title,
+      audio_url: item.audio_url,
+      type: item.type,
+      image_url: item.image_url,
+    })
+  }
+
+  if (loading) {
+    return (
+      <div className="flex min-h-[60vh] items-center justify-center">
+        <Loader2 className="h-5 w-5 animate-spin text-amber" />
+      </div>
+    )
+  }
+
+  if (failed) {
+    return (
+      <div className="mx-auto max-w-shell px-4 py-16 text-center">
+        <p className="font-serif text-xl">The archive did not load.</p>
+        <button onClick={() => window.location.reload()} className="btn-quiet mt-4">
+          Try again
+        </button>
+      </div>
+    )
+  }
+
+  const latestLength = latest ? runLength(latest, bookmarks[latest.id]) : null
+  const latestRead = latest ? estimateReadMinutes(latest.content_length ?? latest.content?.length) : null
+  const latestActive = latest && currentTrack?.id === latest.id
+  const latestBlurb = (() => {
+    const source = latest?.excerpt || latest?.content
+    if (!source) return null
+    const cleaned = source.replace(/^#+\s*/gm, '').replace(/\s+/g, ' ').trim()
+    return cleaned.length > 190 ? `${cleaned.slice(0, 190)}...` : cleaned
+  })()
+
   return (
-    <div className="max-w-6xl mx-auto px-4 py-6 md:py-8">
-      {/* Header */}
-      <div className="mb-6">
-        <h1 className="text-2xl md:text-3xl font-bold mb-1">Library</h1>
-        <p className="text-sm text-text-secondary">{allContent.length} items</p>
-      </div>
+    <div className="mx-auto max-w-shell px-4 py-8 sm:px-6 sm:py-10">
+      {/* Latest */}
+      {latest && (
+        <section className="mb-10 animate-rise-in">
+          <div className="eyebrow-rule mb-4">
+            <span className="eyebrow">Latest</span>
+            <span className="timecode">{formatFullDate(latest.created_at)}</span>
+          </div>
 
-      {/* Search bar */}
-      <div className="relative mb-5">
-        <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-text-muted" />
-        <input
-          type="text"
-          placeholder="Search titles and content..."
-          value={searchQuery}
-          onChange={(e) => setSearchQuery(e.target.value)}
-          className="w-full pl-10 pr-10 py-3 bg-surface border border-border rounded-xl text-sm focus:outline-none focus:border-atlas-400 focus:ring-1 focus:ring-atlas-400/30 transition-colors"
-        />
-        {searchQuery && (
-          <button
-            onClick={() => setSearchQuery('')}
-            className="absolute right-3 top-1/2 -translate-y-1/2 text-text-muted hover:text-text-primary"
-          >
-            <X className="w-4 h-4" />
-          </button>
-        )}
-        {searching && (
-          <Loader2 className="absolute right-3 top-1/2 -translate-y-1/2 w-4 h-4 animate-spin text-atlas-400" />
-        )}
-      </div>
-
-      {/* View toggle + filter chips */}
-      <div className="flex items-center justify-between mb-3">
-        <span className="text-xs text-text-muted">{filtered.length} result{filtered.length !== 1 ? 's' : ''}</span>
-        <div className="flex items-center gap-1 border border-border rounded-lg overflow-hidden">
-          <button
-            onClick={() => toggleView('grid')}
-            className={`p-2 ${viewMode === 'grid' ? 'bg-atlas-400/20 text-atlas-400' : 'text-text-muted hover:text-text-secondary'}`}
-          >
-            <LayoutGrid className="w-4 h-4" />
-          </button>
-          <button
-            onClick={() => toggleView('list')}
-            className={`p-2 ${viewMode === 'list' ? 'bg-atlas-400/20 text-atlas-400' : 'text-text-muted hover:text-text-secondary'}`}
-          >
-            <List className="w-4 h-4" />
-          </button>
-        </div>
-      </div>
-      <div className="flex items-center gap-2 mb-5 overflow-x-auto pb-1 -mx-4 px-4 md:mx-0 md:px-0">
-        {contentTypes.filter(ct => ct.count > 0).map((ct) => {
-          const isActive = selectedType === ct.type
-          return (
-            <button
-              key={ct.type}
-              onClick={() => setSelectedType(isActive ? null : ct.type)}
-              className={`flex items-center gap-1.5 px-3 py-1.5 rounded-full text-xs font-medium whitespace-nowrap transition-colors ${
-                isActive
-                  ? 'bg-atlas-400 text-white'
-                  : 'bg-surface border border-border text-text-secondary hover:border-atlas-400/50'
-              }`}
-            >
-              <ct.icon className="w-3 h-3" />
-              {ct.label}
-              <span className={isActive ? 'text-white/70' : 'text-text-muted'}>{ct.count}</span>
-            </button>
-          )
-        })}
-      </div>
-
-      {/* Results */}
-      {loading ? (
-        <div className="flex items-center justify-center py-12">
-          <Loader2 className="w-6 h-6 animate-spin text-atlas-400" />
-        </div>
-      ) : filtered.length === 0 ? (
-        <div className="text-center py-12 text-text-muted">
-          {searchQuery ? `No results for "${searchQuery}"` : 'No content yet.'}
-        </div>
-      ) : viewMode === 'list' ? (
-        /* List View */
-        <div className="divide-y divide-border border border-border rounded-xl overflow-hidden bg-surface">
-          {filtered.map((item) => {
-            const Icon = typeIcons[item.type] || BookOpen
-            return (
-              <Link
-                key={item.id}
-                to={`/read/${item.id}`}
-                className="flex items-center gap-3 px-4 py-3 hover:bg-white/5 transition-colors active:bg-white/10"
-              >
-                <Icon className="w-4 h-4 text-atlas-400 shrink-0" />
-                <span className="flex-1 min-w-0 text-sm font-medium truncate">{item.title}</span>
-                <div className="flex items-center gap-2 shrink-0">
-                  {item.audio_url && <Headphones className="w-3 h-3 text-text-muted" />}
-                  <span className="text-xs text-text-muted">{formatDate(item.created_at)}</span>
-                </div>
+          <div className="grid gap-6 lg:grid-cols-[1fr_auto] lg:items-end">
+            <div className="min-w-0">
+              <Link to={`/read/${latest.id}`}>
+                <h1 className="max-w-3xl text-balance font-serif text-3xl leading-[1.12] transition-colors hover:text-amber sm:text-[2.6rem]">
+                  {latest.title}
+                </h1>
               </Link>
-            )
-          })}
-        </div>
-      ) : (
-        /* Grid/Card View */
-        <div className="space-y-3">
-          {filtered.map((item) => {
-            const Icon = typeIcons[item.type] || BookOpen
-            return (
-              <Link
-                key={item.id}
-                to={`/read/${item.id}`}
-                className="block bg-surface border border-border rounded-xl overflow-hidden content-card active:scale-[0.99] transition-transform"
-              >
-                {item.image_url && (
-                  <div className="h-32 md:h-40 w-full overflow-hidden">
-                    <img
-                      src={item.image_url}
-                      alt={item.title}
-                      className="w-full h-full object-cover"
-                      loading="lazy"
-                    />
-                  </div>
+              {latestBlurb && (
+                <p className="mt-3 max-w-2xl font-serif text-[1.05rem] leading-relaxed text-ink-dim">
+                  {latestBlurb}
+                </p>
+              )}
+              <div className="mt-4 flex flex-wrap items-center gap-x-3 gap-y-2">
+                <span className="eyebrow">{typeLabel(latest.type)}</span>
+                {latestLength && (
+                  <span className="timecode">
+                    {latestLength.exact
+                      ? formatClock(latestLength.seconds)
+                      : `${formatApprox(latestLength.seconds)} listen`}
+                  </span>
                 )}
-                <div className="p-4 md:p-5">
-                  <div className="flex items-start justify-between gap-3">
-                    <div className="flex-1 min-w-0">
-                      <div className="flex items-center gap-2 mb-1.5">
-                        <Icon className="w-3.5 h-3.5 text-atlas-400" />
-                        <span className="text-xs font-medium text-atlas-400 uppercase">{typeLabels[item.type] || item.type}</span>
-                        {item.audio_url && (
-                          <span className="flex items-center gap-1 text-xs text-text-muted">
-                            <Headphones className="w-3 h-3" />
-                          </span>
-                        )}
-                      </div>
-                      <h3 className="font-semibold text-sm md:text-base mb-1">{item.title}</h3>
-                      {item.content && (
-                        <p className="text-xs md:text-sm text-text-secondary line-clamp-2">
-                          {item.content.slice(0, 150)}...
-                        </p>
-                      )}
-                    </div>
-                    <div className="text-xs text-text-muted whitespace-nowrap">{formatDate(item.created_at)}</div>
-                  </div>
-                </div>
+                {latestRead && <span className="timecode">{latestRead} min read</span>}
+              </div>
+            </div>
+
+            <div className="flex flex-wrap items-center gap-2">
+              {latest.audio_url ? (
+                <>
+                  <button onClick={() => handlePlay(latest)} className="btn-primary">
+                    {latestActive && isPlaying ? (
+                      <><Pause className="h-4 w-4" /> Pause</>
+                    ) : (
+                      <><Play className="h-4 w-4" /> Listen</>
+                    )}
+                  </button>
+                  <DownloadButton id={latest.id} title={latest.title} variant="inline" />
+                </>
+              ) : null}
+              <Link to={`/read/${latest.id}`} className="btn-quiet">
+                <BookOpen className="h-4 w-4" />
+                Read
               </Link>
-            )
-          })}
-        </div>
+            </div>
+          </div>
+        </section>
       )}
+
+      <ArchiveDial items={items} activeDay={activeDay} onSelectDay={setActiveDay} />
+
+      {/* Archive */}
+      <section>
+        <div className="eyebrow-rule mb-4">
+          <span className="eyebrow">Archive</span>
+          <span className="timecode">
+            {visible.length} of {items.length}
+          </span>
+        </div>
+
+        <div className="mb-4 flex flex-col gap-3 sm:flex-row sm:items-center">
+          <div className="relative flex-1">
+            <Search className="pointer-events-none absolute left-3 top-1/2 h-3.5 w-3.5 -translate-y-1/2 text-ink-mute" />
+            <input
+              value={query}
+              onChange={(e) => setQuery(e.target.value)}
+              placeholder="Filter by title"
+              className="w-full rounded-md border border-hairline bg-panel py-2 pl-9 pr-9 font-serif text-[0.95rem] placeholder:text-ink-mute focus:border-amber focus:outline-none"
+            />
+            {query && (
+              <button
+                onClick={() => setQuery('')}
+                className="absolute right-2 top-1/2 -translate-y-1/2 btn-icon h-6 w-6"
+                aria-label="Clear filter"
+              >
+                <X className="h-3.5 w-3.5" />
+              </button>
+            )}
+          </div>
+
+          <div className="hide-scrollbar -mx-4 flex gap-1.5 overflow-x-auto px-4 sm:mx-0 sm:px-0">
+            {FILTERS.filter((f) => f.types.some((t) => counts[t])).map((f) => {
+              const total = f.types.reduce((sum, t) => sum + (counts[t] ?? 0), 0)
+              const on = filter === f.id
+              return (
+                <button
+                  key={f.id}
+                  onClick={() => setFilter(on ? null : f.id)}
+                  className={`chip flex-shrink-0 ${on ? 'chip-on' : ''}`}
+                >
+                  {f.label}
+                  <span className={on ? 'text-amber/70' : 'text-ink-mute'}>{total}</span>
+                </button>
+              )
+            })}
+          </div>
+        </div>
+
+        {visible.length === 0 ? (
+          <p className="py-16 text-center font-serif text-ink-dim">
+            Nothing here yet. Clear the filters to see the whole archive.
+          </p>
+        ) : (
+          <div className="border-t border-hairline">
+            {months.map((group) => (
+              <div key={group.key}>
+                <div className="sticky top-14 z-10 flex items-center justify-between border-b border-hairline bg-ground px-2 py-2 sm:px-3">
+                  <span className="eyebrow">{group.heading}</span>
+                  <span className="timecode">{group.rows.length}</span>
+                </div>
+                {group.rows.map((item) => (
+                  <ArchiveRow
+                    key={item.id}
+                    item={item}
+                    bookmark={bookmarks[item.id]}
+                    isActive={currentTrack?.id === item.id}
+                    isPlaying={isPlaying}
+                    queued={queue.some((q) => q.id === item.id)}
+                    onPlay={handlePlay}
+                    onQueue={handleQueue}
+                  />
+                ))}
+              </div>
+            ))}
+          </div>
+        )}
+      </section>
     </div>
   )
 }

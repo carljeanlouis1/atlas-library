@@ -1,99 +1,137 @@
-import { useEffect, useState } from 'react'
+import { useEffect, useMemo, useState } from 'react'
 import { Link } from 'react-router-dom'
-import { BookOpen, Headphones, FileText, Gavel, Loader2 } from 'lucide-react'
+import { Play, Pause, Loader2 } from 'lucide-react'
+import { fetchLibrary, LibraryItem, typeLabel } from '../lib/library'
+import { formatFullDate, formatTimeOfDay, dayKey } from '../lib/format'
+import { useAudioQueue } from '../contexts/AudioQueueContext'
+import DownloadButton from '../components/DownloadButton'
 
-interface TimelineItem {
-  id: string
-  type: 'text' | 'audio' | 'debate' | 'brief'
-  title: string
-  created_at: string
-}
-
-const typeIcons = {
-  text: BookOpen,
-  audio: Headphones,
-  brief: FileText,
-  debate: Gavel,
-}
-
+/** Everything in the archive, day by day, in the order it arrived. */
 export default function Timeline() {
-  const [items, setItems] = useState<TimelineItem[]>([])
+  const [items, setItems] = useState<LibraryItem[]>([])
   const [loading, setLoading] = useState(true)
+  const [days, setDays] = useState(30)
+
+  const { currentTrack, isPlaying, playTrack, togglePlay } = useAudioQueue()
 
   useEffect(() => {
-    fetch('/api/content?limit=50')
-      .then(res => res.json())
-      .then(data => {
-        if (data.success) {
-          setItems(data.content)
-        }
-        setLoading(false)
-      })
-      .catch(() => setLoading(false))
+    let cancelled = false
+    fetchLibrary()
+      .then((all) => !cancelled && setItems(all))
+      .finally(() => !cancelled && setLoading(false))
+    return () => {
+      cancelled = true
+    }
   }, [])
 
-  // Group by date
-  const groupedByDate = items.reduce((acc, item) => {
-    const date = new Date(item.created_at).toLocaleDateString('en-US', {
-      weekday: 'long',
-      year: 'numeric',
-      month: 'long',
-      day: 'numeric'
-    })
-    if (!acc[date]) acc[date] = []
-    acc[date].push(item)
-    return acc
-  }, {} as Record<string, TimelineItem[]>)
+  const grouped = useMemo(() => {
+    const groups: { key: string; heading: string; rows: LibraryItem[] }[] = []
+    for (const item of items) {
+      const key = dayKey(item.created_at)
+      const last = groups[groups.length - 1]
+      if (last && last.key === key) last.rows.push(item)
+      else groups.push({ key, heading: formatFullDate(item.created_at), rows: [item] })
+    }
+    return groups
+  }, [items])
+
+  const handlePlay = (item: LibraryItem) => {
+    if (!item.audio_url) return
+    if (currentTrack?.id === item.id) togglePlay()
+    else
+      playTrack({
+        id: item.id,
+        title: item.title,
+        audio_url: item.audio_url,
+        type: item.type,
+        image_url: item.image_url,
+      })
+  }
+
+  if (loading) {
+    return (
+      <div className="flex min-h-[60vh] items-center justify-center">
+        <Loader2 className="h-5 w-5 animate-spin text-amber" />
+      </div>
+    )
+  }
+
+  const shown = grouped.slice(0, days)
 
   return (
-    <div className="max-w-4xl mx-auto px-4 py-8">
-      <h1 className="text-2xl font-bold mb-6">Timeline</h1>
+    <div className="mx-auto max-w-3xl px-4 py-8 sm:px-6 sm:py-10">
+      <div className="mb-8">
+        <h1 className="font-serif text-3xl leading-tight sm:text-4xl">Log</h1>
+        <p className="timecode mt-1">
+          {items.length} entries across {grouped.length} days
+        </p>
+      </div>
 
-      {loading ? (
-        <div className="flex items-center justify-center py-12">
-          <Loader2 className="w-6 h-6 animate-spin text-atlas-400" />
-        </div>
-      ) : items.length === 0 ? (
-        <div className="text-center py-12 text-text-muted">
-          No content yet.
-        </div>
-      ) : (
-        <div className="space-y-8">
-          {Object.entries(groupedByDate).map(([date, dateItems]) => (
-            <div key={date}>
-              <h2 className="text-sm font-medium text-text-muted mb-4">{date}</h2>
-              <div className="relative">
-                {/* Timeline line */}
-                <div className="absolute left-6 top-0 bottom-0 w-px bg-border" />
+      <div className="relative">
+        {/* The spine */}
+        <span className="absolute bottom-2 left-[4.25rem] top-2 hidden w-px bg-hairline sm:block" />
 
-                {/* Items */}
-                <div className="space-y-4">
-                  {dateItems.map((item) => {
-                    const Icon = typeIcons[item.type] || BookOpen
-                    const time = new Date(item.created_at).toLocaleTimeString('en-US', {
-                      hour: 'numeric',
-                      minute: '2-digit'
-                    })
-                    return (
-                      <Link key={item.id} to={`/read/${item.id}`} className="flex gap-4 group">
-                        <div className="relative z-10 w-12 h-12 rounded-full bg-surface border border-border flex items-center justify-center group-hover:border-atlas-500 transition-colors">
-                          <Icon className="w-5 h-5 text-atlas-400" />
-                        </div>
-                        <div className="flex-1 bg-surface border border-border rounded-xl p-4 content-card">
-                          <div className="flex items-center justify-between mb-1">
-                            <span className="text-xs font-medium text-atlas-400 uppercase">{item.type}</span>
-                            <span className="text-sm text-text-muted">{time}</span>
-                          </div>
-                          <h3 className="font-medium">{item.title}</h3>
-                        </div>
-                      </Link>
-                    )
-                  })}
-                </div>
-              </div>
+        {shown.map((day) => (
+          <section key={day.key} className="mb-8">
+            <div className="eyebrow-rule mb-3">
+              <span className="eyebrow">{day.heading}</span>
             </div>
-          ))}
-        </div>
+
+            <div className="space-y-1">
+              {day.rows.map((item) => {
+                const isActive = currentTrack?.id === item.id
+                return (
+                  <div
+                    key={item.id}
+                    className={`group relative flex items-center gap-3 rounded-md px-2 py-2.5 transition-colors sm:gap-4 ${
+                      isActive ? 'bg-amber/[0.06]' : 'hover:bg-panel'
+                    }`}
+                  >
+                    <span className={`timecode w-11 flex-shrink-0 ${isActive ? 'text-amber' : ''}`}>
+                      {formatTimeOfDay(item.created_at)}
+                    </span>
+
+                    <span
+                      className={`hidden h-1.5 w-1.5 flex-shrink-0 rounded-full sm:block ${
+                        isActive ? 'bg-amber' : 'bg-hairline group-hover:bg-ink-mute'
+                      }`}
+                    />
+
+                    <Link to={`/read/${item.id}`} className="min-w-0 flex-1">
+                      <h3 className="truncate font-serif text-[1.02rem] leading-snug group-hover:text-amber">
+                        {item.title}
+                      </h3>
+                      <span className="eyebrow">{typeLabel(item.type)}</span>
+                    </Link>
+
+                    {item.audio_url && (
+                      <div className="flex flex-shrink-0 items-center gap-0.5">
+                        <button
+                          onClick={() => handlePlay(item)}
+                          className={`btn-icon ${isActive ? 'text-amber' : ''}`}
+                          aria-label={isActive && isPlaying ? 'Pause' : `Play ${item.title}`}
+                        >
+                          {isActive && isPlaying ? (
+                            <Pause className="h-4 w-4" />
+                          ) : (
+                            <Play className="ml-0.5 h-4 w-4" />
+                          )}
+                        </button>
+                        <DownloadButton id={item.id} title={item.title} />
+                      </div>
+                    )}
+                  </div>
+                )
+              })}
+            </div>
+          </section>
+        ))}
+      </div>
+
+      {days < grouped.length && (
+        <button onClick={() => setDays((d) => d + 30)} className="btn-quiet mx-auto mt-4 flex">
+          Show earlier days
+        </button>
       )}
     </div>
   )

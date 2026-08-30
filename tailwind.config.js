@@ -1,67 +1,90 @@
 /** @type {import('tailwindcss').Config} */
+
+// Colours live as raw RGB channels in src/index.css so both themes and
+// Tailwind's opacity modifiers (bg-amber/15) work off the same tokens.
+const token = (name) => `rgb(var(--${name}) / <alpha-value>)`
+
 export default {
-  content: [
-    "./index.html",
-    "./src/**/*.{js,ts,jsx,tsx}",
-  ],
-  darkMode: 'class',
+  content: ['./index.html', './src/**/*.{js,ts,jsx,tsx}'],
   theme: {
     extend: {
       colors: {
-        // Dark theme colors
-        background: '#0a0a0a',
-        surface: '#141414',
-        'surface-hover': '#1a1a1a',
-        border: '#262626',
-        // Accent colors
-        atlas: {
-          50: '#f0f9ff',
-          100: '#e0f2fe',
-          200: '#bae6fd',
-          300: '#7dd3fc',
-          400: '#38bdf8',
-          500: '#0ea5e9',
-          600: '#0284c7',
-          700: '#0369a1',
-          800: '#075985',
-          900: '#0c4a6e',
+        ground: token('ground'),
+        panel: token('panel'),
+        raise: token('raise'),
+        hairline: token('hairline'),
+        ink: {
+          DEFAULT: token('ink'),
+          dim: token('ink-dim'),
+          mute: token('ink-mute'),
         },
-        // Text colors
-        'text-primary': '#fafafa',
-        'text-secondary': '#a3a3a3',
-        'text-muted': '#525252',
+        amber: token('amber'),
+        rust: token('rust'),
+
+        // Aliases kept so any older component (or a patch pushed from the VPS)
+        // still resolves to the new palette instead of rendering colourless.
+        background: token('ground'),
+        surface: token('panel'),
+        'surface-hover': token('raise'),
+        border: token('hairline'),
+        'text-primary': token('ink'),
+        'text-secondary': token('ink-dim'),
+        'text-muted': token('ink-mute'),
+        atlas: {
+          300: token('amber'),
+          400: token('amber'),
+          500: token('amber'),
+          600: token('rust'),
+          700: token('rust'),
+          900: token('raise'),
+        },
       },
       fontFamily: {
-        sans: ['Inter', 'system-ui', 'sans-serif'],
-        mono: ['JetBrains Mono', 'monospace'],
-        serif: ['Merriweather', 'Georgia', 'serif'],
+        sans: ['Archivo', 'system-ui', '-apple-system', 'sans-serif'],
+        display: ['Archivo', 'system-ui', 'sans-serif'],
+        serif: ['Newsreader', 'Iowan Old Style', 'Georgia', 'serif'],
+        mono: ['Space Mono', 'ui-monospace', 'SFMono-Regular', 'monospace'],
       },
-      typography: {
-        DEFAULT: {
-          css: {
-            color: '#fafafa',
-            a: {
-              color: '#38bdf8',
-              '&:hover': {
-                color: '#7dd3fc',
-              },
-            },
-            h1: { color: '#fafafa' },
-            h2: { color: '#fafafa' },
-            h3: { color: '#fafafa' },
-            h4: { color: '#fafafa' },
-            strong: { color: '#fafafa' },
-            code: { color: '#38bdf8' },
-            blockquote: { 
-              color: '#a3a3a3',
-              borderLeftColor: '#262626',
-            },
-          },
+      fontSize: {
+        '2xs': ['0.6875rem', { lineHeight: '1rem' }],
+      },
+      letterSpacing: {
+        ident: '0.22em',
+        eyebrow: '0.16em',
+      },
+      maxWidth: {
+        reading: '38rem',
+        shell: '76rem',
+      },
+      boxShadow: {
+        lift: '0 18px 50px -24px rgb(0 0 0 / 0.65)',
+        dial: '0 0 22px -4px rgb(var(--amber) / 0.45)',
+      },
+      keyframes: {
+        'rise-in': {
+          from: { opacity: '0', transform: 'translateY(6px)' },
+          to: { opacity: '1', transform: 'none' },
         },
+        'sheet-up': {
+          from: { transform: 'translateY(100%)' },
+          to: { transform: 'none' },
+        },
+        'fade-in': {
+          from: { opacity: '0' },
+          to: { opacity: '1' },
+        },
+        'pulse-dot': {
+          '0%, 100%': { opacity: '1' },
+          '50%': { opacity: '0.25' },
+        },
+      },
+      animation: {
+        'rise-in': 'rise-in 0.4s cubic-bezier(0.22, 1, 0.36, 1) both',
+        'sheet-up': 'sheet-up 0.28s cubic-bezier(0.22, 1, 0.36, 1) both',
+        'fade-in': 'fade-in 0.25s ease both',
+        'pulse-dot': 'pulse-dot 1.8s ease-in-out infinite',
       },
     },
   },
-  plugins: [
-    require('@tailwindcss/typography'),
-  ],
+  plugins: [],
 }

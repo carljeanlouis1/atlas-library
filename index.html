@@ -1,16 +1,38 @@
 <!DOCTYPE html>
-<html lang="en" class="dark">
+<html lang="en" data-theme="night">
   <head>
     <meta charset="UTF-8" />
     <link rel="icon" type="image/svg+xml" href="/atlas.svg" />
-    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-    <meta name="theme-color" content="#0a0a0a" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover" />
+    <meta name="theme-color" content="#171310" />
+    <meta name="description" content="Atlas Library — briefs, essays, recordings and songs, read and listened to in one place." />
     <title>Atlas Library</title>
-    <link rel="preconnect" href="https://fonts.googleapis.com">
-    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500&family=Merriweather:ital,wght@0,400;0,700;1,400&display=swap" rel="stylesheet">
+
+    <!-- Set the theme before first paint so there is no flash of the wrong ground. -->
+    <script>
+      (function () {
+        try {
+          var stored = localStorage.getItem('atlas-theme');
+          var theme = stored === 'daylight' || stored === 'night' ? stored : 'night';
+          document.documentElement.setAttribute('data-theme', theme);
+          document.querySelector('meta[name="theme-color"]').setAttribute(
+            'content',
+            theme === 'daylight' ? '#efeae1' : '#171310'
+          );
+          var size = localStorage.getItem('atlas-font-size') || 'md';
+          document.documentElement.classList.add('font-size-' + size);
+        } catch (e) {}
+      })();
+    </script>
+
+    <link rel="preconnect" href="https://fonts.googleapis.com" />
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+    <link
+      href="https://fonts.googleapis.com/css2?family=Archivo:wdth,wght@75..125,400..700&family=Newsreader:ital,opsz,wght@0,6..72,300..700;1,6..72,300..600&family=Space+Mono:ital,wght@0,400;0,700;1,400&display=swap"
+      rel="stylesheet"
+    />
   </head>
-  <body class="bg-background text-text-primary">
+  <body>
     <div id="root"></div>
     <script type="module" src="/src/main.tsx"></script>
   </body>

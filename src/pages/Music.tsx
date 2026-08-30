@@ -1,180 +1,151 @@
-import { useEffect, useState, useRef, useCallback } from 'react'
-import { useNavigate } from 'react-router-dom'
-import { Play, Pause, SkipBack, SkipForward, Clock, Loader2, Music as MusicIcon, User, Tag, FileText, X } from 'lucide-react'
-
-interface SongItem {
-  id: string
-  title: string
-  audio_url?: string
-  image_url?: string
-  type: string
-  metadata?: {
-    artist_style?: string
-    genre?: string
-    duration?: string
-    lyrics?: string
-    source?: string
-  }
-  tags?: string[]
-  created_at: string
-}
-
-function formatTime(time: number) {
-  const mins = Math.floor(time / 60)
-  const secs = Math.floor(time % 60)
-  return `${mins}:${secs.toString().padStart(2, '0')}`
-}
+import { useEffect, useMemo, useState } from 'react'
+import { Link } from 'react-router-dom'
+import { Play, Pause, Loader2, Disc3, FileText, X } from 'lucide-react'
+import { fetchLibrary, LibraryItem, parseMetadata } from '../lib/library'
+import { useAudioQueue } from '../contexts/AudioQueueContext'
+import DownloadButton from '../components/DownloadButton'
 
 export default function Music() {
-  const navigate = useNavigate()
-  const [songs, setSongs] = useState<SongItem[]>([])
+  const [songs, setSongs] = useState<LibraryItem[]>([])
   const [loading, setLoading] = useState(true)
-  const [activeId, setActiveId] = useState<string | null>(null)
-  const [isPlaying, setIsPlaying] = useState(false)
-  const [showLyrics, setShowLyrics] = useState(false)
-  const [currentTime, setCurrentTime] = useState(0)
-  const [duration, setDuration] = useState(0)
-  const audioRef = useRef<HTMLAudioElement>(null)
+  const [lyricsFor, setLyricsFor] = useState<LibraryItem | null>(null)
+
+  const { currentTrack, isPlaying, playTrack, playAll, togglePlay } = useAudioQueue()
 
   useEffect(() => {
-    fetch('/api/content?type=song&limit=100')
-      .then(res => res.json())
-      .then(data => {
-        if (data.success) {
-          const parsed = data.content.map((item: SongItem) => {
-            if (item.metadata && typeof item.metadata === 'string') {
-              try { item.metadata = JSON.parse(item.metadata as unknown as string) } catch {}
-            }
-            return item
-          })
-          setSongs(parsed)
-        }
-        setLoading(false)
-      })
-      .catch(() => setLoading(false))
+    let cancelled = false
+    fetchLibrary({ type: 'song' })
+      .then((all) => !cancelled && setSongs(all))
+      .finally(() => !cancelled && setLoading(false))
+    return () => {
+      cancelled = true
+    }
   }, [])
 
-  const activeSong = songs.find(s => s.id === activeId)
+  const playable = useMemo(() => songs.filter((s) => s.audio_url), [songs])
 
-  const playSong = (song: SongItem) => {
-    if (!song.audio_url) {
-      navigate(`/read/${song.id}`)
-      return
-    }
-    if (activeId === song.id && isPlaying) {
-      audioRef.current?.pause()
-      setIsPlaying(false)
-    } else if (activeId === song.id && !isPlaying) {
-      audioRef.current?.play()
-      setIsPlaying(true)
-    } else {
-      setActiveId(song.id)
-      setShowLyrics(false)
-      if (audioRef.current) {
-        audioRef.current.src = song.audio_url
-        audioRef.current.play()
-        setIsPlaying(true)
-      }
-    }
+  const toTrack = (song: LibraryItem) => ({
+    id: song.id,
+    title: song.title,
+    audio_url: song.audio_url as string,
+    type: song.type,
+    image_url: song.image_url,
+  })
+
+  const handlePlay = (song: LibraryItem) => {
+    if (!song.audio_url) return
+    if (currentTrack?.id === song.id) togglePlay()
+    else playTrack(toTrack(song))
   }
 
-  const skip = (seconds: number) => {
-    if (audioRef.current) {
-      const d = audioRef.current.duration || 0
-      if (d > 0) {
-        audioRef.current.currentTime = Math.max(0, Math.min(audioRef.current.currentTime + seconds, d))
-      }
-    }
-  }
-
-  const handleTimeUpdate = useCallback(() => {
-    setCurrentTime(audioRef.current?.currentTime || 0)
-  }, [])
-
-  const handleSeek = (e: React.ChangeEvent<HTMLInputElement>) => {
-    const time = parseFloat(e.target.value)
-    if (audioRef.current && audioRef.current.duration > 0) {
-      audioRef.current.currentTime = time
-      setCurrentTime(time)
-    }
+  if (loading) {
+    return (
+      <div className="flex min-h-[60vh] items-center justify-center">
+        <Loader2 className="h-5 w-5 animate-spin text-amber" />
+      </div>
+    )
   }
 
   return (
-    <div className="max-w-5xl mx-auto px-4 py-8 pb-40">
-      <div className="flex items-center gap-3 mb-8">
-        <div className="w-10 h-10 rounded-xl bg-purple-500/20 flex items-center justify-center">
-          <MusicIcon className="w-5 h-5 text-purple-400" />
-        </div>
+    <div className="mx-auto max-w-shell px-4 py-8 sm:px-6 sm:py-10">
+      <div className="mb-8 flex flex-wrap items-end justify-between gap-4">
         <div>
-          <h1 className="text-2xl font-bold">Music</h1>
-          <p className="text-sm text-text-muted">{songs.length} songs</p>
+          <h1 className="font-serif text-3xl leading-tight sm:text-4xl">Music</h1>
+          <p className="timecode mt-1">{songs.length} songs</p>
         </div>
+        {playable.length > 0 && (
+          <button onClick={() => playAll(playable.map(toTrack))} className="btn-primary">
+            <Play className="h-4 w-4" />
+            Play all
+          </button>
+        )}
       </div>
 
-      {/* Hidden audio element */}
-      <audio
-        ref={audioRef}
-        preload="metadata"
-        onTimeUpdate={handleTimeUpdate}
-        onLoadedMetadata={() => setDuration(audioRef.current?.duration || 0)}
-        onDurationChange={() => setDuration(audioRef.current?.duration || 0)}
-        onEnded={() => setIsPlaying(false)}
-      />
-
-      {loading ? (
-        <div className="flex items-center justify-center py-16">
-          <Loader2 className="w-8 h-8 animate-spin text-atlas-400" />
-        </div>
-      ) : songs.length === 0 ? (
-        <div className="text-center py-16 text-text-muted">
-          <MusicIcon className="w-12 h-12 mx-auto mb-4 opacity-30" />
-          <p>No songs yet.</p>
+      {songs.length === 0 ? (
+        <div className="rounded-lg border border-dashed border-hairline py-20 text-center">
+          <Disc3 className="mx-auto mb-3 h-6 w-6 text-ink-mute" />
+          <p className="font-serif text-lg">No songs yet.</p>
         </div>
       ) : (
-        <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 gap-3 sm:gap-4">
+        <div className="grid grid-cols-2 gap-4 sm:grid-cols-3 lg:grid-cols-4">
           {songs.map((song) => {
-            const isActive = activeId === song.id
-            const meta = song.metadata
+            const meta = parseMetadata(song)
+            const isActive = currentTrack?.id === song.id
+            const artist = typeof meta.artist_style === 'string' ? meta.artist_style : null
+            const duration = typeof meta.duration === 'string' ? meta.duration : null
+            const hasLyrics = typeof meta.lyrics === 'string' && meta.lyrics.length > 0
+
             return (
-              <div
-                key={song.id}
-                onClick={() => playSong(song)}
-                className={`bg-surface border rounded-xl overflow-hidden cursor-pointer transition-all hover:scale-[1.02] hover:shadow-lg ${
-                  isActive ? 'border-purple-500 shadow-purple-500/10' : 'border-border'
-                }`}
-              >
-                <div className="relative aspect-square bg-gradient-to-br from-purple-600/30 to-atlas-600/30 flex items-center justify-center">
+              <div key={song.id} className="group">
+                <div
+                  className={`relative aspect-square overflow-hidden rounded-lg border transition-colors ${
+                    isActive ? 'border-amber' : 'border-hairline'
+                  }`}
+                >
                   {song.image_url ? (
-                    <img src={song.image_url} alt={song.title} className="w-full h-full object-cover" />
+                    <img
+                      src={song.image_url}
+                      alt=""
+                      loading="lazy"
+                      className="h-full w-full object-cover"
+                    />
                   ) : (
-                    <MusicIcon className="w-10 h-10 text-purple-400/40" />
-                  )}
-                  <div className="absolute inset-0 flex items-center justify-center bg-black/0 hover:bg-black/30 transition-colors group">
-                    <div className={`w-12 h-12 rounded-full bg-purple-500 flex items-center justify-center shadow-lg transition-transform ${
-                      isActive ? 'scale-100' : 'scale-0 group-hover:scale-100'
-                    }`}>
-                      {isActive && isPlaying ? (
-                        <Pause className="w-5 h-5 text-white" />
-                      ) : (
-                        <Play className="w-5 h-5 text-white ml-0.5" />
-                      )}
+                    <div className="flex h-full w-full items-center justify-center bg-raise">
+                      <Disc3 className="h-8 w-8 text-ink-mute" />
                     </div>
-                  </div>
-                  {meta?.duration && (
-                    <span className="absolute bottom-2 right-2 text-xs bg-black/70 text-white px-2 py-0.5 rounded-full flex items-center gap-1">
-                      <Clock className="w-3 h-3" />
-                      {meta.duration}
+                  )}
+
+                  <button
+                    onClick={() => handlePlay(song)}
+                    className="absolute inset-0 flex items-center justify-center bg-ground/0 transition-colors hover:bg-ground/45 focus-visible:bg-ground/45"
+                    aria-label={isActive && isPlaying ? `Pause ${song.title}` : `Play ${song.title}`}
+                  >
+                    <span
+                      className={`flex h-12 w-12 items-center justify-center rounded-full bg-amber text-ground transition-transform ${
+                        isActive ? 'scale-100' : 'scale-0 group-hover:scale-100'
+                      }`}
+                    >
+                      {isActive && isPlaying ? (
+                        <Pause className="h-5 w-5" />
+                      ) : (
+                        <Play className="ml-0.5 h-5 w-5" />
+                      )}
+                    </span>
+                  </button>
+
+                  {duration && (
+                    <span className="timecode absolute bottom-2 right-2 rounded bg-ground/80 px-1.5 py-0.5 text-ink">
+                      {duration}
                     </span>
                   )}
                 </div>
-                <div className="p-2.5">
-                  <h3 className="font-semibold text-sm truncate mb-1">{song.title}</h3>
-                  {meta?.artist_style && (
-                    <span className="inline-flex items-center gap-1 text-xs text-purple-300 bg-purple-500/15 px-2 py-0.5 rounded-full">
-                      <User className="w-3 h-3" />
-                      {meta.artist_style}
-                    </span>
-                  )}
+
+                <div className="mt-2.5 flex items-start gap-1">
+                  <div className="min-w-0 flex-1">
+                    <Link
+                      to={`/read/${song.id}`}
+                      className={`block truncate font-serif text-[1.02rem] hover:text-amber ${
+                        isActive ? 'text-amber' : ''
+                      }`}
+                    >
+                      {song.title}
+                    </Link>
+                    {artist && <p className="eyebrow mt-0.5 truncate">{artist}</p>}
+                  </div>
+                  <div className="flex flex-shrink-0 items-center">
+                    {hasLyrics && (
+                      <button
+                        onClick={() => setLyricsFor(song)}
+                        className="btn-icon h-7 w-7"
+                        aria-label={`Lyrics for ${song.title}`}
+                      >
+                        <FileText className="h-3.5 w-3.5" />
+                      </button>
+                    )}
+                    {song.audio_url && (
+                      <DownloadButton id={song.id} title={song.title} className="h-7 w-7" />
+                    )}
+                  </div>
                 </div>
               </div>
             )
@@ -182,86 +153,42 @@ export default function Music() {
         </div>
       )}
 
-      {/* Lyrics overlay — slides up from bottom */}
-      {showLyrics && activeSong?.metadata?.lyrics && (
-        <div className="fixed inset-0 z-[55] flex flex-col">
-          <div className="flex-1 bg-black/60 backdrop-blur-sm" onClick={() => setShowLyrics(false)} />
-          <div className="bg-surface border-t border-border rounded-t-2xl max-h-[70vh] overflow-y-auto px-5 pt-4 pb-28 animate-slideUp">
-            <div className="flex items-center justify-between mb-4 sticky top-0 bg-surface py-2 z-10">
-              <div>
-                <h3 className="text-lg font-semibold text-purple-400">{activeSong.title}</h3>
-                {activeSong.metadata?.artist_style && (
-                  <span className="text-sm text-text-muted">{activeSong.metadata.artist_style} style</span>
-                )}
+      {/* Lyrics sheet */}
+      {lyricsFor && (
+        <div className="fixed inset-0 z-[60] flex flex-col justify-end sm:items-center sm:justify-center sm:p-6">
+          <div
+            className="absolute inset-0 animate-fade-in bg-ground/80 backdrop-blur-sm"
+            onClick={() => setLyricsFor(null)}
+          />
+          <div className="relative max-h-[78vh] w-full animate-sheet-up overflow-y-auto rounded-t-xl border border-hairline bg-panel p-5 pb-32 sm:max-w-lg sm:rounded-xl sm:pb-6">
+            <div className="sticky -top-5 -mx-5 mb-4 flex items-start justify-between gap-4 bg-panel px-5 pb-3 pt-5">
+              <div className="min-w-0">
+                <h2 className="truncate font-serif text-xl">{lyricsFor.title}</h2>
+                <p className="eyebrow mt-0.5">
+                  {String(parseMetadata(lyricsFor).artist_style ?? 'Lyrics')}
+                </p>
               </div>
-              <button
-                onClick={() => setShowLyrics(false)}
-                className="p-2 hover:bg-surface-hover rounded-full transition-colors"
-              >
-                <X className="w-5 h-5" />
+              <button onClick={() => setLyricsFor(null)} className="btn-icon" aria-label="Close">
+                <X className="h-4 w-4" />
               </button>
             </div>
-            <div className="text-text-secondary whitespace-pre-line leading-relaxed text-[15px] pb-4">
-              {activeSong.metadata.lyrics.split('\n').map((line: string, i: number) => (
-                <div key={i} className={
-                  line.startsWith('[') ? 'text-purple-400 font-bold mt-5 mb-1 text-base' :
-                  line.trim() === '' ? 'h-3' : 'py-0.5'
-                }>
-                  {line}
-                </div>
-              ))}
-            </div>
-          </div>
-        </div>
-      )}
-
-      {/* Sticky bottom player */}
-      {activeSong && (
-        <div className="fixed bottom-0 left-0 right-0 z-50 bg-surface/95 backdrop-blur border-t border-border">
-          <div className="max-w-5xl mx-auto px-4 py-3">
-            <div className="flex items-center gap-2 mb-2">
-              <span className="text-xs text-text-muted w-10 text-right tabular-nums">{formatTime(currentTime)}</span>
-              <input
-                type="range"
-                min="0"
-                max={duration || 100}
-                value={currentTime}
-                onChange={handleSeek}
-                className="audio-slider flex-1"
-              />
-              <span className="text-xs text-text-muted w-10 tabular-nums">{formatTime(duration)}</span>
-            </div>
-            <div className="flex items-center gap-3">
-              <button onClick={() => skip(-10)} className="p-2 hover:bg-surface-hover rounded-lg">
-                <SkipBack className="w-4 h-4" />
-              </button>
-              <button
-                onClick={() => playSong(activeSong)}
-                className="w-10 h-10 rounded-full bg-purple-500 hover:bg-purple-600 flex items-center justify-center flex-shrink-0"
-              >
-                {isPlaying ? <Pause className="w-4 h-4 text-white" /> : <Play className="w-4 h-4 text-white ml-0.5" />}
-              </button>
-              <button onClick={() => skip(10)} className="p-2 hover:bg-surface-hover rounded-lg">
-                <SkipForward className="w-4 h-4" />
-              </button>
-              <div className="flex-1 min-w-0">
-                <div className="font-medium text-sm truncate">{activeSong.title}</div>
-                {activeSong.metadata?.artist_style && (
-                  <div className="text-xs text-text-muted truncate">{activeSong.metadata.artist_style}</div>
-                )}
-              </div>
-              {/* LYRICS BUTTON — right in the player bar */}
-              {activeSong.metadata?.lyrics && (
-                <button
-                  onClick={() => setShowLyrics(!showLyrics)}
-                  className={`p-2.5 rounded-lg transition-colors flex-shrink-0 ${
-                    showLyrics ? 'bg-purple-500/30 text-purple-300' : 'hover:bg-surface-hover text-text-muted'
-                  }`}
-                  title="Lyrics"
-                >
-                  <FileText className="w-5 h-5" />
-                </button>
-              )}
+            <div className="font-serif text-[1.02rem] leading-relaxed">
+              {String(parseMetadata(lyricsFor).lyrics ?? '')
+                .split('\n')
+                .map((line, i) => (
+                  <div
+                    key={i}
+                    className={
+                      line.startsWith('[')
+                        ? 'eyebrow mb-1 mt-5 first:mt-0'
+                        : line.trim() === ''
+                          ? 'h-3'
+                          : 'text-ink-dim'
+                    }
+                  >
+                    {line}
+                  </div>
+                ))}
             </div>
           </div>
         </div>

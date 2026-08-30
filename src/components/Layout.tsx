@@ -1,351 +1,142 @@
-import { useState } from 'react'
-import { Outlet, Link, useLocation } from 'react-router-dom'
-import {
-  BookOpen, Headphones, Clock, Home, Search, MessageCircle, Settings, Music,
-  Play, Pause, SkipBack, SkipForward, List, Bookmark, ChevronUp, ChevronDown,
-  X, Trash2, Maximize2
-} from 'lucide-react'
+import { useEffect, useState } from 'react'
+import { Outlet, Link, NavLink, useLocation } from 'react-router-dom'
+import { Search, Sun, Moon, Library, Headphones, Disc3, CalendarDays, SlidersHorizontal } from 'lucide-react'
 import { useAudioQueue } from '../contexts/AudioQueueContext'
+import { useTheme } from '../lib/theme'
+import PlayerBar from './PlayerBar'
+import CommandPalette from './CommandPalette'
 
-const navItems = [
-  { path: '/', icon: Home, label: 'Library' },
-  { path: '/music', icon: Music, label: 'Music' },
-  { path: '/audio', icon: Headphones, label: 'Audio' },
-  { path: '/timeline', icon: Clock, label: 'Timeline' },
-  { path: '/settings', icon: Settings, label: 'Settings' },
+const NAV = [
+  { path: '/', label: 'Library', icon: Library, end: true },
+  { path: '/audio', label: 'Audio', icon: Headphones, end: false },
+  { path: '/music', label: 'Music', icon: Disc3, end: false },
+  { path: '/timeline', label: 'Log', icon: CalendarDays, end: false },
+  { path: '/settings', label: 'Settings', icon: SlidersHorizontal, end: false },
 ]
-
-function formatTime(time: number) {
-  const mins = Math.floor(time / 60)
-  const secs = Math.floor(time % 60)
-  return `${mins}:${secs.toString().padStart(2, '0')}`
-}
 
 export default function Layout() {
   const location = useLocation()
-  const [queueOpen, setQueueOpen] = useState(false)
-  const [queueModalOpen, setQueueModalOpen] = useState(false)
+  const { theme, toggle } = useTheme()
+  const { currentTrack, isPlaying, togglePlay } = useAudioQueue()
+  const [paletteOpen, setPaletteOpen] = useState(false)
 
-  const {
-    currentTrack, isPlaying, currentTime, duration, queue,
-    bookmarkSaved, resumeMessage,
-    togglePlay, skip, seek, skipToNext,
-    removeFromQueue, moveInQueue, clearQueue, saveCurrentBookmark,
-  } = useAudioQueue()
+  // Global keys: cmd-K opens search, space plays, J and L jump.
+  useEffect(() => {
+    const isTyping = (target: EventTarget | null) => {
+      const el = target as HTMLElement | null
+      return !!el && (el.tagName === 'INPUT' || el.tagName === 'TEXTAREA' || el.isContentEditable)
+    }
+
+    const onKey = (e: KeyboardEvent) => {
+      if ((e.metaKey || e.ctrlKey) && e.key.toLowerCase() === 'k') {
+        e.preventDefault()
+        setPaletteOpen((v) => !v)
+        return
+      }
+      if (isTyping(e.target) || e.metaKey || e.ctrlKey || e.altKey) return
+      if (e.key === '/') {
+        e.preventDefault()
+        setPaletteOpen(true)
+      } else if (e.key === ' ' && currentTrack) {
+        e.preventDefault()
+        togglePlay()
+      }
+    }
+
+    window.addEventListener('keydown', onKey)
+    return () => window.removeEventListener('keydown', onKey)
+  }, [currentTrack, togglePlay])
+
+  useEffect(() => {
+    window.scrollTo({ top: 0, behavior: 'instant' as ScrollBehavior })
+  }, [location.pathname])
 
   const hasPlayer = !!currentTrack
 
   return (
-    <div className="min-h-screen bg-background">
-      {/* Header */}
-      <header className="fixed top-0 left-0 right-0 z-50 glass border-b">
-        <div className="max-w-6xl mx-auto px-4 h-16 flex items-center justify-between">
-          <Link to="/" className="flex items-center gap-2">
-            <div className="w-8 h-8 rounded-lg bg-gradient-to-br from-atlas-400 to-atlas-600 flex items-center justify-center">
-              <BookOpen className="w-4 h-4 text-white" />
-            </div>
-            <span className="font-semibold text-lg">Atlas Library</span>
+    <div className="min-h-screen">
+      <header className="sticky top-0 z-40 border-b border-hairline bg-ground/85 backdrop-blur-md">
+        <div className="mx-auto flex h-14 max-w-shell items-center gap-4 px-4 sm:px-6">
+          <Link to="/" className="group flex items-baseline gap-2">
+            <span className="ident text-[0.95rem] leading-none">Atlas</span>
+            <span className="eyebrow hidden leading-none sm:inline">Library</span>
+            {isPlaying && (
+              <span
+                className="ml-0.5 h-1.5 w-1.5 animate-pulse-dot rounded-full bg-amber"
+                title="Playing"
+              />
+            )}
           </Link>
 
-          {/* Search */}
-          <div className="flex-1 max-w-md mx-8">
-            <div className="relative">
-              <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-text-muted" />
-              <input
-                type="text"
-                placeholder="Search content..."
-                className="w-full bg-surface border border-border rounded-lg pl-10 pr-4 py-2 text-sm focus:outline-none focus:border-atlas-500 transition-colors"
-              />
-            </div>
-          </div>
-
-          {/* Nav */}
-          <nav className="flex items-center gap-1">
-            {navItems.map((item) => {
-              const Icon = item.icon
-              const isActive = location.pathname === item.path
-              return (
-                <Link
-                  key={item.path}
-                  to={item.path}
-                  className={`flex items-center gap-2 px-3 py-2 rounded-lg text-sm transition-colors ${
-                    isActive
-                      ? 'bg-atlas-500/20 text-atlas-400'
-                      : 'text-text-secondary hover:text-text-primary hover:bg-surface-hover'
-                  }`}
-                >
-                  <Icon className="w-4 h-4" />
-                  <span className="hidden sm:inline">{item.label}</span>
-                </Link>
-              )
-            })}
+          <nav className="ml-auto hidden items-center gap-1 sm:flex">
+            {NAV.map((item) => (
+              <NavLink
+                key={item.path}
+                to={item.path}
+                end={item.end}
+                className={({ isActive }) =>
+                  `eyebrow rounded px-2.5 py-1.5 transition-colors ${
+                    isActive ? 'text-amber' : 'hover:text-ink'
+                  }`
+                }
+              >
+                {item.label}
+              </NavLink>
+            ))}
           </nav>
+
+          <div className="ml-auto flex items-center gap-1 sm:ml-2">
+            <button
+              onClick={() => setPaletteOpen(true)}
+              className="group flex items-center gap-2 rounded-md border border-hairline px-2.5 py-1.5 text-ink-mute transition-colors hover:border-ink-mute hover:text-ink"
+              aria-label="Search the archive"
+            >
+              <Search className="h-3.5 w-3.5" />
+              <span className="eyebrow hidden md:inline">Search</span>
+              <span className="timecode hidden md:inline">/</span>
+            </button>
+            <button
+              onClick={toggle}
+              className="btn-icon"
+              aria-label={theme === 'night' ? 'Switch to daylight' : 'Switch to night'}
+            >
+              {theme === 'night' ? <Sun className="h-4 w-4" /> : <Moon className="h-4 w-4" />}
+            </button>
+          </div>
         </div>
       </header>
 
-      {/* Main content */}
-      <main className={`pt-16 min-h-screen ${hasPlayer ? 'pb-28' : ''}`}>
+      <main className={hasPlayer ? 'pb-44 sm:pb-28' : 'pb-24 sm:pb-16'}>
         <Outlet />
       </main>
 
-      {/* Queue Drawer — slides up above player bar */}
-      {hasPlayer && queueOpen && (
-        <div className="fixed bottom-[4.5rem] left-0 right-0 z-40">
-          <div className="max-w-4xl mx-auto px-4">
-            <div className="bg-surface border border-border border-b-0 rounded-t-xl overflow-hidden shadow-xl">
-              {/* Queue header */}
-              <div className="flex items-center justify-between px-4 py-2.5 border-b border-border">
-                <span className="text-sm font-medium">
-                  Up Next
-                  {queue.length > 0 && (
-                    <span className="ml-1.5 text-xs text-text-muted">({queue.length} track{queue.length !== 1 ? 's' : ''})</span>
-                  )}
-                </span>
-                {queue.length > 0 && (
-                  <button
-                    onClick={clearQueue}
-                    className="flex items-center gap-1 text-xs text-text-muted hover:text-red-400 transition-colors"
-                  >
-                    <Trash2 className="w-3 h-3" />
-                    Clear all
-                  </button>
-                )}
-              </div>
-              {/* Queue list */}
-              <div className="overflow-y-auto max-h-60">
-                {queue.length === 0 ? (
-                  <div className="py-8 text-center text-sm text-text-muted">
-                    Queue is empty — add tracks from the Audio page
-                  </div>
-                ) : (
-                  queue.map((item, i) => (
-                    <div key={`${item.id}-${i}`} className="flex items-center gap-3 px-4 py-2.5 hover:bg-surface-hover border-b border-border/50 last:border-0">
-                      <span className="text-xs text-text-muted w-5 text-center flex-shrink-0">{i + 1}</span>
-                      <div className="flex-1 min-w-0">
-                        <div className="text-sm truncate">{item.title}</div>
-                        <div className="text-xs text-text-muted capitalize">{item.type}</div>
-                      </div>
-                      <div className="flex items-center gap-0.5 flex-shrink-0">
-                        <button
-                          onClick={() => moveInQueue(i, 'up')}
-                          disabled={i === 0}
-                          className="p-1 hover:bg-surface rounded disabled:opacity-25 transition-opacity"
-                          title="Move up"
-                        >
-                          <ChevronUp className="w-3.5 h-3.5" />
-                        </button>
-                        <button
-                          onClick={() => moveInQueue(i, 'down')}
-                          disabled={i === queue.length - 1}
-                          className="p-1 hover:bg-surface rounded disabled:opacity-25 transition-opacity"
-                          title="Move down"
-                        >
-                          <ChevronDown className="w-3.5 h-3.5" />
-                        </button>
-                        <button
-                          onClick={() => removeFromQueue(i)}
-                          className="p-1 hover:text-red-400 hover:bg-surface rounded transition-colors"
-                          title="Remove"
-                        >
-                          <X className="w-3.5 h-3.5" />
-                        </button>
-                      </div>
-                    </div>
-                  ))
-                )}
-              </div>
-              {/* View full queue button */}
-              {queue.length > 0 && (
-                <div className="px-4 py-2 border-t border-border/50">
-                  <button
-                    onClick={() => { setQueueModalOpen(true); setQueueOpen(false) }}
-                    className="flex items-center gap-1.5 text-xs text-atlas-400 hover:text-atlas-300 transition-colors"
-                  >
-                    <Maximize2 className="w-3 h-3" />
-                    View full queue
-                  </button>
-                </div>
-              )}
-            </div>
-          </div>
-        </div>
-      )}
+      <PlayerBar />
 
-      {/* Full Queue Modal */}
-      {queueModalOpen && (
-        <div className="fixed inset-0 z-[60] flex items-center justify-center p-4">
-          <div className="absolute inset-0 bg-black/60 backdrop-blur-sm" onClick={() => setQueueModalOpen(false)} />
-          <div className="relative w-full max-w-2xl bg-surface border border-border rounded-2xl shadow-2xl overflow-hidden flex flex-col max-h-[80vh]">
-            {/* Modal header */}
-            <div className="flex items-center justify-between px-6 py-4 border-b border-border flex-shrink-0">
-              <div>
-                <h2 className="text-lg font-semibold">Queue</h2>
-                <p className="text-xs text-text-muted mt-0.5">{queue.length} track{queue.length !== 1 ? 's' : ''} up next</p>
-              </div>
-              <div className="flex items-center gap-2">
-                {queue.length > 0 && (
-                  <button
-                    onClick={clearQueue}
-                    className="flex items-center gap-1.5 px-3 py-1.5 text-xs text-red-400 hover:text-red-300 hover:bg-red-400/10 rounded-lg transition-colors"
-                  >
-                    <Trash2 className="w-3.5 h-3.5" />
-                    Clear all
-                  </button>
-                )}
-                <button
-                  onClick={() => setQueueModalOpen(false)}
-                  className="p-2 hover:bg-surface-hover rounded-lg transition-colors"
-                >
-                  <X className="w-4 h-4" />
-                </button>
-              </div>
-            </div>
-
-            {/* Currently playing */}
-            {currentTrack && (
-              <div className="px-6 py-3 bg-atlas-500/10 border-b border-border/50 flex-shrink-0">
-                <div className="text-xs text-atlas-400 font-medium mb-0.5">Now Playing</div>
-                <div className="text-sm font-medium truncate">{currentTrack.title}</div>
-                <div className="text-xs text-text-muted capitalize">{currentTrack.type}</div>
-              </div>
-            )}
-
-            {/* Queue list */}
-            <div className="overflow-y-auto flex-1">
-              {queue.length === 0 ? (
-                <div className="py-16 text-center text-sm text-text-muted">
-                  Queue is empty — add tracks from the Audio page
-                </div>
-              ) : (
-                queue.map((item, i) => (
-                  <div key={`${item.id}-${i}`} className="flex items-center gap-4 px-6 py-3.5 hover:bg-surface-hover border-b border-border/50 last:border-0">
-                    <span className="text-sm text-text-muted w-6 text-center flex-shrink-0">{i + 1}</span>
-                    <div className="flex-1 min-w-0">
-                      <div className="text-sm font-medium truncate">{item.title}</div>
-                      <span className="inline-block mt-0.5 text-[10px] uppercase tracking-wide font-semibold px-1.5 py-0.5 rounded bg-surface border border-border text-text-muted">
-                        {item.type}
-                      </span>
-                    </div>
-                    <div className="flex items-center gap-1 flex-shrink-0">
-                      <button
-                        onClick={() => moveInQueue(i, 'up')}
-                        disabled={i === 0}
-                        className="p-1.5 hover:bg-surface rounded-lg disabled:opacity-25 transition-opacity"
-                        title="Move up"
-                      >
-                        <ChevronUp className="w-4 h-4" />
-                      </button>
-                      <button
-                        onClick={() => moveInQueue(i, 'down')}
-                        disabled={i === queue.length - 1}
-                        className="p-1.5 hover:bg-surface rounded-lg disabled:opacity-25 transition-opacity"
-                        title="Move down"
-                      >
-                        <ChevronDown className="w-4 h-4" />
-                      </button>
-                      <button
-                        onClick={() => removeFromQueue(i)}
-                        className="p-1.5 hover:text-red-400 hover:bg-surface rounded-lg transition-colors"
-                        title="Remove"
-                      >
-                        <X className="w-4 h-4" />
-                      </button>
-                    </div>
-                  </div>
-                ))
-              )}
-            </div>
-          </div>
-        </div>
-      )}
-
-      {/* Persistent Player Bar */}
-      {hasPlayer && (
-        <div className="fixed bottom-0 left-0 right-0 z-50 glass border-t">
-          <div className="max-w-4xl mx-auto px-4 pt-2 pb-3">
-            {/* Seek slider */}
-            <input
-              type="range"
-              min="0"
-              max={duration || 100}
-              value={currentTime}
-              onChange={(e) => seek(parseFloat(e.target.value))}
-              className="audio-slider w-full mb-2"
-            />
-            <div className="flex items-center gap-2">
-              {/* Track info */}
-              <div className="flex-1 min-w-0">
-                <div className="text-sm font-medium truncate">{currentTrack.title}</div>
-                <div className="text-xs text-text-muted flex items-center gap-2">
-                  <span>{formatTime(currentTime)} / {formatTime(duration)}</span>
-                  {resumeMessage && (
-                    <span className="text-atlas-400 animate-pulse">{resumeMessage}</span>
-                  )}
-                  {bookmarkSaved && (
-                    <span className="text-atlas-400">Saved!</span>
-                  )}
-                </div>
-              </div>
-
-              {/* Playback controls */}
-              <button onClick={() => skip(-10)} className="p-2 hover:bg-surface-hover rounded-lg transition-colors" title="Back 10s">
-                <SkipBack className="w-4 h-4" />
-              </button>
-              <button
-                onClick={togglePlay}
-                className="w-9 h-9 rounded-full bg-atlas-500 hover:bg-atlas-600 flex items-center justify-center flex-shrink-0 transition-colors"
-              >
-                {isPlaying
-                  ? <Pause className="w-4 h-4 text-white" />
-                  : <Play className="w-4 h-4 text-white ml-0.5" />
+      {/* Mobile tab bar */}
+      <nav className="fixed inset-x-0 bottom-0 z-50 border-t border-hairline bg-panel sm:hidden">
+        <div className="flex h-14 items-stretch">
+          {NAV.map((item) => {
+            const Icon = item.icon
+            return (
+              <NavLink
+                key={item.path}
+                to={item.path}
+                end={item.end}
+                className={({ isActive }) =>
+                  `flex flex-1 flex-col items-center justify-center gap-1 transition-colors ${
+                    isActive ? 'text-amber' : 'text-ink-mute'
+                  }`
                 }
-              </button>
-              <button onClick={() => skip(10)} className="p-2 hover:bg-surface-hover rounded-lg transition-colors" title="Forward 10s">
-                <SkipForward className="w-4 h-4" />
-              </button>
-              {queue.length > 0 && (
-                <button
-                  onClick={skipToNext}
-                  className="hidden sm:flex items-center gap-1 px-2 py-1 text-xs text-text-muted hover:text-text-primary hover:bg-surface-hover rounded-lg transition-colors"
-                  title="Skip to next"
-                >
-                  Next
-                </button>
-              )}
-              <button
-                onClick={saveCurrentBookmark}
-                className="p-2 hover:bg-surface-hover rounded-lg transition-colors"
-                title="Save position"
               >
-                <Bookmark className={`w-4 h-4 ${bookmarkSaved ? 'text-atlas-400 fill-atlas-400' : 'text-text-muted'}`} />
-              </button>
-
-              {/* Queue toggle with badge */}
-              <button
-                onClick={() => setQueueOpen(p => !p)}
-                className={`relative p-2 rounded-lg transition-colors ${queueOpen ? 'bg-atlas-500/20 text-atlas-400' : 'hover:bg-surface-hover text-text-muted'}`}
-                title="Queue"
-              >
-                <List className="w-4 h-4" />
-                {queue.length > 0 && (
-                  <span className="absolute -top-1 -right-1 w-4 h-4 bg-atlas-500 rounded-full text-white text-[10px] font-bold flex items-center justify-center">
-                    {queue.length > 9 ? '9+' : queue.length}
-                  </span>
-                )}
-              </button>
-            </div>
-          </div>
+                <Icon className="h-[18px] w-[18px]" />
+                <span className="eyebrow text-[9px] leading-none tracking-[0.08em]">{item.label}</span>
+              </NavLink>
+            )
+          })}
         </div>
-      )}
+      </nav>
 
-      {/* Chat button */}
-      <button
-        className={`fixed right-6 w-14 h-14 rounded-full bg-atlas-500 hover:bg-atlas-600 text-white shadow-lg shadow-atlas-500/20 flex items-center justify-center transition-all ${
-          hasPlayer ? 'bottom-24' : 'bottom-6'
-        }`}
-      >
-        <MessageCircle className="w-6 h-6" />
-      </button>
+      <CommandPalette open={paletteOpen} onClose={() => setPaletteOpen(false)} />
     </div>
   )
 }

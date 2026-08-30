@@ -1,58 +1,83 @@
 # Atlas Library
 
-A personal content hub for long-form text, audio, and AI-assisted reading.
+A personal archive of briefs, essays, recordings and songs — read in a proper
+reading room, listened to from anywhere in the app, and downloadable to the
+device.
 
-## Features
+## What's here
 
-- 📚 **Reading Room** — Long-form text with clean typography (stories, analyses, briefs)
-- 🎧 **Audio Archive** — Echo Studio content, morning briefs, voice notes
-- 💬 **Context Chat** — Chat with Atlas about any piece of content
-- 📅 **Timeline View** — Everything organized chronologically
-- 🏷️ **Collections** — Group related content by topic or type
-- 🔍 **Search** — Full-text search across everything
-- 📤 **Push API** — Endpoint for Atlas to add new content
+- **Library** — the whole archive as a dated index, grouped by month, with a
+  scrubbable dial across every day the archive covers
+- **Audio** — every recording, with a "half-listened" shelf that picks up where
+  you stopped
+- **Music** — songs with artwork and lyrics
+- **Log** — everything day by day, in the order it arrived
+- **Reader** — long-form reading with narration, artwork, and a chat about the piece
+- **Download** — save any item's audio to the device, named
+  `2026-08-28 Morning Brief.mp3`
+- **Global player** — playback follows you across pages, with a queue, playback
+  speed, saved positions, and lock-screen controls (Media Session)
+- **Search** — `/` or `cmd K` anywhere
+
+## Design
+
+Two themes off one set of CSS variables in `src/index.css`: **Night** (warm
+espresso ground, amber dial glow) and **Daylight** (paper). Type is Archivo for
+station lettering and UI, Newsreader for anything you read at length, and Space
+Mono for timecodes and dates.
+
+Tailwind colours map to those variables (`--ground`, `--panel`, `--hairline`,
+`--ink`, `--amber`, ...), so both themes come from one token set. The older
+names (`surface`, `border`, `text-primary`, `atlas-*`) are kept as aliases so
+existing components still resolve.
 
 ## Tech Stack
 
 - React 18 + TypeScript + Vite
-- Tailwind CSS (dark mode first)
-- Cloudflare Pages + Workers + D1
-- Simple auth (single user)
+- Tailwind CSS
+- Cloudflare Pages + Functions + D1 + R2
 
-## Content Types
+## API
 
-- **Text** — Stories, analyses, research, briefs
-- **Audio** — TTS narrations, voice notes
-- **Debates** — Tribunal outputs with model responses
-- **Briefs** — Morning briefings, summaries
-
-## API Endpoints
-
-### Push Content
+### List content
 ```
-POST /api/content
-{
-  "type": "text" | "audio" | "debate" | "brief",
-  "title": "...",
-  "content": "...",
-  "audioUrl": "...",
-  "metadata": {...},
-  "tags": ["tag1", "tag2"]
-}
+GET /api/content?type=brief&limit=20&offset=0&search=...
+GET /api/content?list=1&limit=500        # slim projection for the archive views
 ```
+`list=1` returns `id, type, title, audio_url, image_url, metadata, created_at,
+updated_at`, plus a 220-character `excerpt` and `content_length` — enough to
+render the index and estimate listen/read times without shipping every essay in
+full. Without it the response shape is unchanged.
 
-### Get Content
+### Single item
 ```
-GET /api/content?type=text&limit=20&offset=0
 GET /api/content/:id
+PATCH /api/content/:id      # Bearer ATLAS_API_KEY
+DELETE /api/content/:id     # Bearer ATLAS_API_KEY
 ```
 
-### Chat Context
+### Download audio
 ```
-POST /api/chat/:contentId
-{
-  "message": "..."
-}
+GET /api/download/:id
+```
+Streams the item's audio with `Content-Disposition: attachment` and a readable,
+date-prefixed filename. Audio held in our own R2 bucket is served straight from
+the bucket; anything hosted elsewhere is streamed through. Returns 404 when the
+item has no audio and 502 when an external host no longer has the file.
+
+### Push content
+```
+POST /api/content           # Bearer ATLAS_API_KEY
+{ "type": "text" | "audio" | "debate" | "brief" | "story" | "song",
+  "title": "...", "content": "...", "audioUrl": "...", "tags": ["..."] }
+```
+
+### Other
+```
+POST /api/tts               # generate narration (chunks and stitches long text)
+POST /api/chat/:contentId   # discuss a piece
+POST /api/content/:id/artwork
+GET  /api/audio/*  GET /api/images/*
 ```
 
 ## Development
@@ -62,10 +87,18 @@ npm install
 npm run dev
 ```
 
+`npm run dev` proxies `/api` to the live deployment (see `vite.config.ts`),
+because there is no local D1 or R2 to read from.
+
 ## Deployment
 
-Deployed to Cloudflare Pages. Push to `main` to deploy.
+Pushing to `main` deploys to Cloudflare Pages via GitHub Actions. To deploy by
+hand:
+
+```bash
+npm run build && npx wrangler pages deploy dist --project-name=atlas-library --branch=main
+```
 
 ---
 
-Built by Atlas 🌍
+Built by Atlas

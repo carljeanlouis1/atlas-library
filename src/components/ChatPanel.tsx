@@ -1,5 +1,6 @@
 import { useState, useRef, useEffect } from 'react'
-import { X, Send, Loader2 } from 'lucide-react'
+import { X, ArrowUp, Loader2 } from 'lucide-react'
+import ReactMarkdown from 'react-markdown'
 
 interface Message {
   id: string
@@ -15,135 +16,151 @@ interface ChatPanelProps {
   initialMessages?: Message[]
 }
 
-export default function ChatPanel({ contentId, contentTitle, onClose, initialMessages = [] }: ChatPanelProps) {
+const OPENERS = [
+  'What is the argument here?',
+  'What did I miss?',
+  'Push back on this.',
+]
+
+export default function ChatPanel({
+  contentId,
+  contentTitle,
+  onClose,
+  initialMessages = [],
+}: ChatPanelProps) {
   const [messages, setMessages] = useState<Message[]>(initialMessages)
   const [input, setInput] = useState('')
   const [loading, setLoading] = useState(false)
-  const messagesEndRef = useRef<HTMLDivElement>(null)
-
-  const scrollToBottom = () => {
-    messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' })
-  }
+  const [failed, setFailed] = useState(false)
+  const endRef = useRef<HTMLDivElement>(null)
+  const inputRef = useRef<HTMLTextAreaElement>(null)
 
   useEffect(() => {
-    scrollToBottom()
-  }, [messages])
+    endRef.current?.scrollIntoView({ behavior: 'smooth' })
+  }, [messages, loading])
 
-  const sendMessage = async () => {
-    if (!input.trim() || loading) return
+  useEffect(() => {
+    inputRef.current?.focus()
+    const onKey = (e: KeyboardEvent) => e.key === 'Escape' && onClose()
+    window.addEventListener('keydown', onKey)
+    return () => window.removeEventListener('keydown', onKey)
+  }, [onClose])
 
-    const userMessage: Message = {
-      id: Date.now().toString(),
-      role: 'user',
-      message: input.trim()
-    }
+  const send = async (text: string) => {
+    const trimmed = text.trim()
+    if (!trimmed || loading) return
 
-    setMessages(prev => [...prev, userMessage])
+    setMessages((prev) => [...prev, { id: `${Date.now()}`, role: 'user', message: trimmed }])
     setInput('')
     setLoading(true)
+    setFailed(false)
 
     try {
       const response = await fetch(`/api/chat/${contentId}`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ message: userMessage.message })
+        body: JSON.stringify({ message: trimmed }),
       })
-
       const data = await response.json()
-
       if (data.success && data.message) {
-        const assistantMessage: Message = {
-          id: (Date.now() + 1).toString(),
-          role: 'assistant',
-          message: data.message
-        }
-        setMessages(prev => [...prev, assistantMessage])
+        setMessages((prev) => [
+          ...prev,
+          { id: `${Date.now() + 1}`, role: 'assistant', message: data.message },
+        ])
+      } else {
+        setFailed(true)
       }
-    } catch (err) {
-      console.error('Chat error:', err)
+    } catch {
+      setFailed(true)
     }
-
     setLoading(false)
   }
 
-  const handleKeyDown = (e: React.KeyboardEvent) => {
-    if (e.key === 'Enter' && !e.shiftKey) {
-      e.preventDefault()
-      sendMessage()
-    }
-  }
-
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 backdrop-blur-sm p-4">
-      <div className="w-full max-w-2xl h-[80vh] bg-background border border-border rounded-2xl flex flex-col overflow-hidden">
-        {/* Header */}
-        <div className="flex items-center justify-between p-4 border-b border-border">
-          <div>
-            <h3 className="font-semibold">Discuss with Atlas</h3>
-            <p className="text-sm text-text-muted truncate max-w-md">{contentTitle}</p>
+    <div className="fixed inset-0 z-[65] flex items-end justify-center sm:items-center sm:p-6">
+      <div className="absolute inset-0 animate-fade-in bg-ground/80 backdrop-blur-sm" onClick={onClose} />
+
+      <div className="relative flex h-[88vh] w-full animate-sheet-up flex-col overflow-hidden rounded-t-xl border border-hairline bg-panel sm:h-[80vh] sm:max-w-2xl sm:rounded-xl">
+        <header className="flex items-start justify-between gap-4 border-b border-hairline px-5 py-3.5">
+          <div className="min-w-0">
+            <p className="eyebrow">Discuss</p>
+            <p className="truncate font-serif text-[1.05rem] leading-tight">{contentTitle}</p>
           </div>
-          <button
-            onClick={onClose}
-            className="p-2 hover:bg-surface-hover rounded-lg transition-colors"
-          >
-            <X className="w-5 h-5" />
+          <button onClick={onClose} className="btn-icon flex-shrink-0" aria-label="Close">
+            <X className="h-4 w-4" />
           </button>
-        </div>
+        </header>
 
-        {/* Messages */}
-        <div className="flex-1 overflow-y-auto p-4 space-y-4">
+        <div className="flex-1 space-y-5 overflow-y-auto px-5 py-5">
           {messages.length === 0 && (
-            <div className="text-center text-text-muted py-8">
-              <p>Ask me anything about this content!</p>
-              <p className="text-sm mt-2">I'll discuss, explain, or analyze it with you.</p>
-            </div>
-          )}
-          
-          {messages.map((msg) => (
-            <div
-              key={msg.id}
-              className={`flex ${msg.role === 'user' ? 'justify-end' : 'justify-start'}`}
-            >
-              <div
-                className={`max-w-[80%] rounded-2xl px-4 py-2 ${
-                  msg.role === 'user'
-                    ? 'bg-atlas-500 text-white'
-                    : 'bg-surface border border-border'
-                }`}
-              >
-                <p className="whitespace-pre-wrap">{msg.message}</p>
+            <div className="py-10 text-center">
+              <p className="font-serif text-lg text-ink-dim">Ask about this piece.</p>
+              <div className="mt-4 flex flex-wrap justify-center gap-2">
+                {OPENERS.map((opener) => (
+                  <button key={opener} onClick={() => send(opener)} className="chip">
+                    {opener}
+                  </button>
+                ))}
               </div>
             </div>
-          ))}
-          
+          )}
+
+          {messages.map((msg) =>
+            msg.role === 'user' ? (
+              <div key={msg.id} className="flex justify-end">
+                <p className="max-w-[85%] rounded-lg rounded-br-sm bg-raise px-4 py-2.5 font-serif text-[1rem] leading-relaxed">
+                  {msg.message}
+                </p>
+              </div>
+            ) : (
+              <div key={msg.id} className="max-w-[92%]">
+                <p className="eyebrow mb-1.5">Atlas</p>
+                <div className="reading text-[1.02rem] leading-relaxed">
+                  <ReactMarkdown>{msg.message}</ReactMarkdown>
+                </div>
+              </div>
+            )
+          )}
+
           {loading && (
-            <div className="flex justify-start">
-              <div className="bg-surface border border-border rounded-2xl px-4 py-2">
-                <Loader2 className="w-5 h-5 animate-spin text-atlas-400" />
-              </div>
+            <div className="flex items-center gap-2 text-ink-mute">
+              <Loader2 className="h-3.5 w-3.5 animate-spin text-amber" />
+              <span className="eyebrow">Thinking</span>
             </div>
           )}
-          
-          <div ref={messagesEndRef} />
+
+          {failed && (
+            <p className="rounded-md border border-rust/40 bg-rust/10 px-4 py-2.5 text-sm text-rust">
+              That did not go through. Send it again.
+            </p>
+          )}
+
+          <div ref={endRef} />
         </div>
 
-        {/* Input */}
-        <div className="p-4 border-t border-border">
-          <div className="flex gap-2">
+        <div className="border-t border-hairline p-3 pb-6 sm:pb-3">
+          <div className="flex items-end gap-2">
             <textarea
+              ref={inputRef}
               value={input}
               onChange={(e) => setInput(e.target.value)}
-              onKeyDown={handleKeyDown}
-              placeholder="Ask about this content..."
+              onKeyDown={(e) => {
+                if (e.key === 'Enter' && !e.shiftKey) {
+                  e.preventDefault()
+                  send(input)
+                }
+              }}
+              placeholder="Ask about this piece"
               rows={1}
-              className="flex-1 bg-surface border border-border rounded-xl px-4 py-3 resize-none focus:outline-none focus:border-atlas-500 transition-colors"
+              className="max-h-32 flex-1 resize-none rounded-md border border-hairline bg-ground px-3.5 py-2.5 font-serif text-[1rem] placeholder:text-ink-mute focus:border-amber focus:outline-none"
             />
             <button
-              onClick={sendMessage}
+              onClick={() => send(input)}
               disabled={!input.trim() || loading}
-              className="px-4 bg-atlas-500 hover:bg-atlas-600 disabled:opacity-50 disabled:cursor-not-allowed text-white rounded-xl transition-colors"
+              className="btn h-10 w-10 flex-shrink-0 rounded-full bg-amber text-ground hover:brightness-110"
+              aria-label="Send"
             >
-              <Send className="w-5 h-5" />
+              <ArrowUp className="h-4 w-4" />
             </button>
           </div>
         </div>

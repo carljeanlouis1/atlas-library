@@ -1,38 +1,15 @@
-import { useEffect, useState, useRef, useCallback } from 'react'
-import { useParams } from 'react-router-dom'
-import { Headphones, MessageCircle, Share, Bookmark, Loader2, SkipBack, SkipForward, Play, Pause, Volume2, ChevronLeft, ChevronRight, ListPlus, Check } from 'lucide-react'
+import { useEffect, useState, useCallback, useMemo } from 'react'
+import { useParams, Link } from 'react-router-dom'
+import {
+  Play, Pause, RotateCcw, RotateCw, MessageCircle, Loader2, ListPlus, Check,
+  ChevronLeft, ChevronRight, Headphones, Palette, ArrowLeft,
+} from 'lucide-react'
 import ReactMarkdown from 'react-markdown'
 import ChatPanel from '../components/ChatPanel'
+import DownloadButton from '../components/DownloadButton'
 import { useAudioQueue } from '../contexts/AudioQueueContext'
-
-function getAudioBookmark(id: string): { time: number; duration: number } | null {
-  try {
-    const raw = localStorage.getItem(`atlas-audio-pos-${id}`)
-    if (!raw) return null
-    return JSON.parse(raw)
-  } catch {
-    return null
-  }
-}
-
-function saveAudioBookmark(id: string, time: number, duration: number) {
-  if (time < 2 || duration < 1) return
-  localStorage.setItem(`atlas-audio-pos-${id}`, JSON.stringify({
-    time,
-    duration,
-    updatedAt: Date.now()
-  }))
-}
-
-function clearAudioBookmark(id: string) {
-  localStorage.removeItem(`atlas-audio-pos-${id}`)
-}
-
-function formatAudioTime(time: number) {
-  const mins = Math.floor(time / 60)
-  const secs = Math.floor(time % 60)
-  return `${mins}:${secs.toString().padStart(2, '0')}`
-}
+import { getBookmark, parseMetadata, typeLabel } from '../lib/library'
+import { formatClock, formatFullDate, estimateReadMinutes } from '../lib/format'
 
 interface ChatMessage {
   id: string
@@ -47,7 +24,6 @@ interface StoryPage {
   image_url?: string
   image_base64?: string
   narration_text?: string
-  narration_segments?: { segment_id: number; narration_text: string }[]
 }
 
 interface ContentItem {
@@ -55,9 +31,9 @@ interface ContentItem {
   type: string
   title: string
   content?: string
-  audio_url?: string
-  image_url?: string
-  metadata?: Record<string, unknown>
+  audio_url?: string | null
+  image_url?: string | null
+  metadata?: Record<string, unknown> | string | null
   tags?: string[]
   chat?: ChatMessage[]
   pages?: StoryPage[]
@@ -70,170 +46,87 @@ export default function Reader() {
   const [loading, setLoading] = useState(true)
   const [generating, setGenerating] = useState(false)
   const [generatingArtwork, setGeneratingArtwork] = useState(false)
+  const [error, setError] = useState<string | null>(null)
   const [audioUrl, setAudioUrl] = useState<string | null>(null)
   const [showChat, setShowChat] = useState(false)
   const [justQueued, setJustQueued] = useState(false)
-
-  const { addToQueue } = useAudioQueue()
-  
-  // Audio player state
-  const audioRef = useRef<HTMLAudioElement>(null)
-  const [isPlaying, setIsPlaying] = useState(false)
-  const [currentTime, setCurrentTime] = useState(0)
-  const [duration, setDuration] = useState(0)
-  const [resumeMessage, setResumeMessage] = useState<string | null>(null)
-  const [bookmarkSaved, setBookmarkSaved] = useState(false)
-  const lastSaveRef = useRef(0)
-  const pendingRestoreRef = useRef(false)
-
-  // Story viewer state
   const [currentPage, setCurrentPage] = useState(0)
+  const [scrolled, setScrolled] = useState(0)
 
-  // Apply font size setting on load
-  useEffect(() => {
-    const fontSize = localStorage.getItem('atlas-font-size') || 'md'
-    document.documentElement.classList.remove('font-size-sm', 'font-size-md', 'font-size-lg')
-    document.documentElement.classList.add(`font-size-${fontSize}`)
-  }, [])
+  const {
+    currentTrack, isPlaying, currentTime, duration,
+    playTrack, togglePlay, skip, seek, addToQueue,
+  } = useAudioQueue()
+
+  const isCurrent = !!content && currentTrack?.id === content.id
 
   useEffect(() => {
+    setLoading(true)
+    setError(null)
     fetch(`/api/content/${id}`)
-      .then(res => res.json())
-      .then(data => {
-        if (data.success) {
-          // Ensure metadata is parsed (may come as JSON string from D1)
-          const item = data.content
-          if (item.metadata && typeof item.metadata === 'string') {
-            try { item.metadata = JSON.parse(item.metadata) } catch(e) {}
-          }
-          setContent(item)
-          if (item.audio_url) {
-            setAudioUrl(item.audio_url)
-            // Check for bookmark to restore
-            const bm = getAudioBookmark(item.id)
-            if (bm && bm.time > 2) {
-              pendingRestoreRef.current = true
-            }
-          }
+      .then((res) => res.json())
+      .then((data) => {
+        if (!data.success) {
+          setError('That item is not in the archive.')
+          return
         }
-        setLoading(false)
+        const item = data.content as ContentItem
+        item.metadata = parseMetadata(item as never)
+        setContent(item)
+        setAudioUrl(item.audio_url ?? null)
       })
-      .catch(() => setLoading(false))
+      .catch(() => setError('The archive did not answer. Try again in a moment.'))
+      .finally(() => setLoading(false))
   }, [id])
 
-  // Save position on beforeunload
+  // Reading progress across the article.
   useEffect(() => {
-    const handleUnload = () => {
-      if (id && audioRef.current && audioRef.current.currentTime > 2) {
-        saveAudioBookmark(id, audioRef.current.currentTime, audioRef.current.duration || 0)
-      }
+    const onScroll = () => {
+      const max = document.documentElement.scrollHeight - window.innerHeight
+      setScrolled(max > 0 ? Math.min(window.scrollY / max, 1) : 0)
     }
-    window.addEventListener('beforeunload', handleUnload)
-    return () => window.removeEventListener('beforeunload', handleUnload)
-  }, [id])
+    onScroll()
+    window.addEventListener('scroll', onScroll, { passive: true })
+    return () => window.removeEventListener('scroll', onScroll)
+  }, [content])
 
-  // Audio controls
-  const togglePlay = () => {
-    if (audioRef.current) {
-      if (isPlaying) {
-        audioRef.current.pause()
-      } else {
-        audioRef.current.play()
-      }
-      setIsPlaying(!isPlaying)
+  const meta = useMemo(
+    () => (content ? (parseMetadata(content as never) as Record<string, unknown>) : {}),
+    [content]
+  )
+
+  const handleListen = useCallback(() => {
+    if (!content || !audioUrl) return
+    if (isCurrent) {
+      togglePlay()
+      return
     }
+    playTrack({
+      id: content.id,
+      title: content.title,
+      audio_url: audioUrl,
+      type: content.type,
+      image_url: content.image_url,
+    })
+  }, [content, audioUrl, isCurrent, playTrack, togglePlay])
+
+  const handleQueue = () => {
+    if (!content || !audioUrl) return
+    addToQueue({
+      id: content.id,
+      title: content.title,
+      audio_url: audioUrl,
+      type: content.type,
+      image_url: content.image_url,
+    })
+    setJustQueued(true)
+    setTimeout(() => setJustQueued(false), 2000)
   }
 
-  const skip = (seconds: number) => {
-    if (audioRef.current) {
-      const audioDuration = audioRef.current.duration || 0
-      if (audioDuration > 0) {
-        audioRef.current.currentTime = Math.max(0, Math.min(audioRef.current.currentTime + seconds, audioDuration))
-      }
-    }
-  }
-
-  const formatTime = (time: number) => {
-    const mins = Math.floor(time / 60)
-    const secs = Math.floor(time % 60)
-    return `${mins}:${secs.toString().padStart(2, '0')}`
-  }
-
-  // Throttled auto-save on timeupdate
-  const handleTimeUpdate = useCallback(() => {
-    if (audioRef.current) {
-      setCurrentTime(audioRef.current.currentTime)
-      if (id) {
-        const now = Date.now()
-        if (now - lastSaveRef.current >= 5000) {
-          lastSaveRef.current = now
-          saveAudioBookmark(id, audioRef.current.currentTime, audioRef.current.duration || 0)
-        }
-      }
-    }
-  }, [id])
-
-  const handleLoadedMetadata = () => {
-    if (audioRef.current) {
-      setDuration(audioRef.current.duration)
-    }
-  }
-
-  // Restore position when audio is ready
-  const handleCanPlay = useCallback(() => {
-    if (audioRef.current && audioRef.current.duration) {
-      setDuration(audioRef.current.duration)
-    }
-    if (pendingRestoreRef.current && audioRef.current && id) {
-      const bm = getAudioBookmark(id)
-      if (bm && bm.time > 2) {
-        audioRef.current.currentTime = bm.time
-        setCurrentTime(bm.time)
-        setResumeMessage(`Resuming from ${formatAudioTime(bm.time)}`)
-        setTimeout(() => setResumeMessage(null), 3000)
-      }
-      pendingRestoreRef.current = false
-    }
-  }, [id])
-
-  const handleEnded = useCallback(() => {
-    setIsPlaying(false)
-    if (id) clearAudioBookmark(id)
-  }, [id])
-
-  const handlePause = useCallback(() => {
-    if (id && audioRef.current && audioRef.current.currentTime > 2) {
-      saveAudioBookmark(id, audioRef.current.currentTime, audioRef.current.duration || 0)
-    }
-  }, [id])
-
-  const handleManualBookmark = () => {
-    if (id && audioRef.current) {
-      saveAudioBookmark(id, audioRef.current.currentTime, audioRef.current.duration || 0)
-      setBookmarkSaved(true)
-      setTimeout(() => setBookmarkSaved(false), 2000)
-    }
-  }
-
-  const handleSeek = (e: React.ChangeEvent<HTMLInputElement>) => {
-    const time = parseFloat(e.target.value)
-    if (audioRef.current) {
-      const audioDuration = audioRef.current.duration || 0
-      if (audioDuration > 0 && time >= 0 && time <= audioDuration) {
-        audioRef.current.currentTime = time
-        setCurrentTime(time)
-      }
-    }
-  }
-
-  // Generate TTS for text content
   const generateSpeech = async () => {
     if (!content?.content) return
     setGenerating(true)
-    
-    // Get voice preference from localStorage
-    const selectedVoice = localStorage.getItem('atlas-voice') || 'nova'
-    
+    setError(null)
     try {
       const response = await fetch('/api/tts', {
         method: 'POST',
@@ -241,369 +134,260 @@ export default function Reader() {
         body: JSON.stringify({
           text: content.content,
           contentId: id,
-          voice: selectedVoice
-        })
+          voice: localStorage.getItem('atlas-voice') || 'nova',
+        }),
       })
       const data = await response.json()
-      if (data.audioUrl) {
-        setAudioUrl(data.audioUrl)
-      }
-    } catch (err) {
-      console.error('TTS generation failed:', err)
+      if (data.audioUrl) setAudioUrl(data.audioUrl)
+      else setError(data.error || 'Speech generation did not return audio.')
+    } catch {
+      setError('Speech generation failed. Try again.')
     }
     setGenerating(false)
   }
 
-  const handleAddToQueue = () => {
-    if (!content || !audioUrl) return
-    addToQueue({ id: content.id, title: content.title, audio_url: audioUrl, type: content.type })
-    setJustQueued(true)
-    setTimeout(() => setJustQueued(false), 2000)
-  }
-
-  // Generate artwork using Nano Banana Pro (Gemini)
   const generateArtwork = async () => {
     if (!content) return
     setGeneratingArtwork(true)
-    
     try {
-      const response = await fetch(`/api/content/${id}/artwork`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' }
-      })
+      const response = await fetch(`/api/content/${id}/artwork`, { method: 'POST' })
       const data = await response.json()
       if (data.success && data.imageUrl) {
-        // Update content with new image
-        setContent(prev => prev ? { ...prev, image_url: data.imageUrl } : null)
+        setContent((prev) => (prev ? { ...prev, image_url: data.imageUrl } : prev))
+      } else {
+        setError(data.error || 'Artwork generation did not return an image.')
       }
-    } catch (err) {
-      console.error('Artwork generation failed:', err)
+    } catch {
+      setError('Artwork generation failed. Try again.')
     }
     setGeneratingArtwork(false)
   }
 
   if (loading) {
     return (
-      <div className="flex items-center justify-center min-h-[60vh]">
-        <Loader2 className="w-8 h-8 animate-spin text-atlas-400" />
+      <div className="flex min-h-[60vh] items-center justify-center">
+        <Loader2 className="h-5 w-5 animate-spin text-amber" />
       </div>
     )
   }
 
   if (!content) {
     return (
-      <div className="max-w-3xl mx-auto px-4 py-8 text-center">
-        <h1 className="text-2xl font-bold mb-4">Content not found</h1>
+      <div className="mx-auto max-w-reading px-4 py-20 text-center">
+        <p className="font-serif text-2xl">{error || 'Not found'}</p>
+        <Link to="/" className="btn-quiet mt-6">
+          <ArrowLeft className="h-4 w-4" />
+          Back to the library
+        </Link>
       </div>
     )
   }
 
-  const date = new Date(content.created_at).toLocaleDateString()
+  const readMinutes = estimateReadMinutes(content.content?.length)
+  const resume = getBookmark(content.id)
+  const lyrics = typeof meta.lyrics === 'string' ? meta.lyrics : null
+  const fill = duration > 0 ? (currentTime / duration) * 100 : 0
 
   return (
-    <div className="max-w-3xl mx-auto px-4 py-8">
-      {/* Hero Image */}
-      {content.image_url && (
-        <div className="mb-8 -mx-4 md:mx-0 md:rounded-xl overflow-hidden">
-          <img 
-            src={content.image_url} 
-            alt={content.title}
-            className="w-full h-64 md:h-80 object-cover"
-          />
-        </div>
-      )}
+    <>
+      {/* Reading progress */}
+      <div
+        className="fixed left-0 top-14 z-30 h-px bg-amber transition-[width] duration-150"
+        style={{ width: `${scrolled * 100}%` }}
+        aria-hidden
+      />
 
-      {/* Header */}
-      <div className="mb-8">
-        <div className="flex items-center gap-2 mb-4">
-          <span className="text-xs font-medium text-atlas-400 uppercase">{content.type}</span>
-          <span className="text-text-muted">•</span>
-          <span className="text-sm text-text-muted">{date}</span>
-        </div>
-        <h1 className="text-3xl font-bold mb-4">{content.title}</h1>
-        {content.tags && content.tags.length > 0 && (
-          <div className="flex items-center gap-2">
-            {content.tags.map((tag) => (
-              <span key={tag} className="tag-pill">{tag}</span>
-            ))}
+      <article className="mx-auto max-w-reading px-4 py-8 sm:py-12">
+        <Link to="/" className="eyebrow mb-8 inline-flex items-center gap-1.5 hover:text-amber">
+          <ArrowLeft className="h-3 w-3" />
+          Library
+        </Link>
+
+        <header className="mb-8">
+          <div className="eyebrow-rule mb-4">
+            <span className="eyebrow">{typeLabel(content.type)}</span>
+            <span className="timecode">{formatFullDate(content.created_at)}</span>
           </div>
-        )}
-      </div>
 
-      {/* Audio Player */}
-      {audioUrl && (
-        <div className="bg-surface border border-border rounded-xl p-4 mb-8">
-          <audio
-            ref={audioRef}
-            src={audioUrl}
-            preload="metadata"
-            onTimeUpdate={handleTimeUpdate}
-            onLoadedMetadata={handleLoadedMetadata}
-            onDurationChange={() => {
-              if (audioRef.current && audioRef.current.duration) {
-                setDuration(audioRef.current.duration)
-              }
-            }}
-            onCanPlay={handleCanPlay}
-            onEnded={handleEnded}
-            onPause={handlePause}
+          <h1 className="text-balance font-serif text-[2.1rem] leading-[1.12] sm:text-[2.7rem]">
+            {content.title}
+          </h1>
+
+          <div className="mt-4 flex flex-wrap items-center gap-x-3 gap-y-1">
+            {readMinutes && <span className="timecode">{readMinutes} min read</span>}
+            {typeof meta.artist_style === 'string' && (
+              <span className="timecode">In the style of {meta.artist_style}</span>
+            )}
+            {typeof meta.genre === 'string' && <span className="timecode">{meta.genre}</span>}
+            {content.tags?.slice(0, 5).map((tag) => (
+              <span key={tag} className="eyebrow">
+                {tag}
+              </span>
+            ))}
+            {content.tags && content.tags.length > 5 && (
+              <span className="eyebrow">+{content.tags.length - 5}</span>
+            )}
+          </div>
+        </header>
+
+        {content.image_url && content.type !== 'story' && (
+          <img
+            src={content.image_url}
+            alt=""
+            className="mb-8 aspect-[3/2] w-full rounded-lg border border-hairline object-cover"
           />
-          
-          <div className="space-y-2">
-            {/* Seek slider — full width, own row */}
-            <div className="flex items-center gap-2">
-              <span className="text-xs text-text-muted w-10 text-right tabular-nums">{formatTime(currentTime)}</span>
-              <input
-                type="range"
-                min="0"
-                max={duration || 100}
-                value={currentTime}
-                onChange={handleSeek}
-                className="audio-slider flex-1"
-              />
-              <span className="text-xs text-text-muted w-10 tabular-nums">{formatTime(duration)}</span>
-            </div>
-            {/* Controls row */}
-            <div className="flex items-center justify-center gap-3">
+        )}
+
+        {/* Audio */}
+        {audioUrl ? (
+          <section className="mb-8 rounded-lg border border-hairline bg-panel p-4">
+            <div className="flex items-center gap-3">
               <button
-                onClick={() => skip(-10)}
-                className="p-2 hover:bg-surface-hover rounded-lg transition-colors"
-                title="Back 10 seconds"
+                onClick={handleListen}
+                className="btn h-11 w-11 flex-shrink-0 rounded-full bg-amber text-ground hover:brightness-110"
+                aria-label={isCurrent && isPlaying ? 'Pause' : 'Listen'}
               >
-                <SkipBack className="w-5 h-5" />
-              </button>
-              <button
-                onClick={togglePlay}
-                className="w-12 h-12 rounded-full bg-atlas-500 hover:bg-atlas-600 flex items-center justify-center transition-colors"
-              >
-                {isPlaying ? (
-                  <Pause className="w-5 h-5 text-white" />
+                {isCurrent && isPlaying ? (
+                  <Pause className="h-4 w-4" />
                 ) : (
-                  <Play className="w-5 h-5 text-white ml-0.5" />
+                  <Play className="ml-0.5 h-4 w-4" />
                 )}
               </button>
-              <button
-                onClick={() => skip(10)}
-                className="p-2 hover:bg-surface-hover rounded-lg transition-colors"
-                title="Forward 10 seconds"
-              >
-                <SkipForward className="w-5 h-5" />
-              </button>
-              <button
-                onClick={handleManualBookmark}
-                className="p-2 hover:bg-surface-hover rounded-lg transition-colors"
-                title="Save position"
-              >
-                <Bookmark className={`w-5 h-5 ${bookmarkSaved ? 'text-atlas-400 fill-atlas-400' : 'text-text-muted'}`} />
-              </button>
-              <Volume2 className="w-5 h-5 text-text-muted" />
-            </div>
-            {/* Resume / bookmark feedback */}
-            {(resumeMessage || bookmarkSaved) && (
-              <div className="text-center text-xs text-atlas-400">
-                {resumeMessage && <span className="animate-pulse">{resumeMessage}</span>}
-                {bookmarkSaved && <span>Position saved!</span>}
-              </div>
-            )}
-          </div>
-        </div>
-      )}
 
-      {/* Actions */}
-      <div className="flex items-center gap-2 mb-8 pb-8 border-b border-border">
-        {!content.image_url && content.content && (
-          <button
-            onClick={generateArtwork}
-            disabled={generatingArtwork}
-            className="flex items-center gap-2 px-4 py-2 bg-atlas-500 hover:bg-atlas-600 disabled:opacity-50 text-white rounded-lg transition-colors"
-          >
-            {generatingArtwork ? (
-              <Loader2 className="w-4 h-4 animate-spin" />
-            ) : (
-              <span>🎨</span>
-            )}
-            {generatingArtwork ? 'Generating Artwork...' : 'Generate Artwork'}
-          </button>
-        )}
-        {!audioUrl && content.content && (
-          <button
-            onClick={generateSpeech}
-            disabled={generating}
-            className="flex items-center gap-2 px-4 py-2 bg-atlas-500 hover:bg-atlas-600 disabled:opacity-50 text-white rounded-lg transition-colors"
-          >
-            {generating ? (
-              <Loader2 className="w-4 h-4 animate-spin" />
-            ) : (
-              <Headphones className="w-4 h-4" />
-            )}
-            {generating ? 'Generating...' : 'Convert to Speech'}
-          </button>
-        )}
-        {audioUrl && !content.audio_url && (
-          <span className="text-sm text-green-400 flex items-center gap-2">
-            <Headphones className="w-4 h-4" />
-            Audio generated!
-          </span>
-        )}
-        {audioUrl && (
-          <button
-            onClick={handleAddToQueue}
-            className={`flex items-center gap-2 px-4 py-2 rounded-lg border transition-colors ${
-              justQueued
-                ? 'bg-green-500/20 text-green-400 border-green-500/30'
-                : 'bg-surface hover:bg-surface-hover border-border'
-            }`}
-          >
-            {justQueued ? <Check className="w-4 h-4" /> : <ListPlus className="w-4 h-4" />}
-            {justQueued ? 'Added to queue' : 'Add to queue'}
-          </button>
-        )}
-        <button
-          onClick={() => setShowChat(true)}
-          className="flex items-center gap-2 px-4 py-2 bg-surface hover:bg-surface-hover border border-border rounded-lg transition-colors"
-        >
-          <MessageCircle className="w-4 h-4" />
-          Discuss
-        </button>
-        <button className="p-2 hover:bg-surface-hover rounded-lg transition-colors">
-          <Bookmark className="w-4 h-4" />
-        </button>
-        <button className="p-2 hover:bg-surface-hover rounded-lg transition-colors">
-          <Share className="w-4 h-4" />
-        </button>
-      </div>
-
-      {/* Content - Story Viewer or Text */}
-      {content.type === 'story' && content.pages && content.pages.length > 0 ? (
-        <div className="story-viewer">
-          {/* Page Display */}
-          <div className="relative bg-surface border border-border rounded-xl overflow-hidden mb-4">
-            {content.pages[currentPage]?.image_url ? (
-              <img 
-                src={content.pages[currentPage].image_url}
-                alt={`Page ${currentPage + 1}`}
-                className="w-full h-auto"
-              />
-            ) : content.pages[currentPage]?.image_base64 ? (
-              <img 
-                src={`data:image/png;base64,${content.pages[currentPage].image_base64}`}
-                alt={`Page ${currentPage + 1}`}
-                className="w-full h-auto"
-              />
-            ) : (
-              <div className="h-96 flex items-center justify-center text-text-muted">
-                No image for this page
-              </div>
-            )}
-          </div>
-
-          {/* Page Navigation */}
-          <div className="flex items-center justify-between mb-6">
-            <button
-              onClick={() => setCurrentPage(p => Math.max(0, p - 1))}
-              disabled={currentPage === 0}
-              className="flex items-center gap-2 px-4 py-2 bg-surface hover:bg-surface-hover disabled:opacity-50 border border-border rounded-lg transition-colors"
-            >
-              <ChevronLeft className="w-4 h-4" />
-              Previous
-            </button>
-            
-            <span className="text-sm text-text-muted">
-              Page {currentPage + 1} of {content.pages.length}
-            </span>
-            
-            <button
-              onClick={() => setCurrentPage(p => Math.min(content.pages!.length - 1, p + 1))}
-              disabled={currentPage === content.pages.length - 1}
-              className="flex items-center gap-2 px-4 py-2 bg-surface hover:bg-surface-hover disabled:opacity-50 border border-border rounded-lg transition-colors"
-            >
-              Next
-              <ChevronRight className="w-4 h-4" />
-            </button>
-          </div>
-
-          {/* Page Narration */}
-          {content.pages[currentPage]?.narration_text && (
-            <div className="bg-surface border border-border rounded-xl p-4 mb-4">
-              <h4 className="text-sm font-medium text-atlas-400 mb-2">Narration</h4>
-              <p className="text-text-secondary">{content.pages[currentPage].narration_text}</p>
-            </div>
-          )}
-
-          {/* Page Thumbnails */}
-          <div className="flex gap-2 overflow-x-auto pb-2">
-            {content.pages.map((page, idx) => (
-              <button
-                key={page.id}
-                onClick={() => setCurrentPage(idx)}
-                className={`flex-shrink-0 w-16 h-16 rounded-lg overflow-hidden border-2 transition-colors ${
-                  idx === currentPage ? 'border-atlas-400' : 'border-transparent hover:border-border'
-                }`}
-              >
-                {page.image_url ? (
-                  <img src={page.image_url} alt={`Thumb ${idx + 1}`} className="w-full h-full object-cover" />
-                ) : page.image_base64 ? (
-                  <img src={`data:image/png;base64,${page.image_base64}`} alt={`Thumb ${idx + 1}`} className="w-full h-full object-cover" />
+              <div className="min-w-0 flex-1">
+                {isCurrent ? (
+                  <>
+                    <input
+                      type="range"
+                      className="transport"
+                      min={0}
+                      max={duration || 100}
+                      step={0.5}
+                      value={currentTime}
+                      onChange={(e) => seek(parseFloat(e.target.value))}
+                      style={{ ['--fill' as string]: `${fill}%` }}
+                      aria-label="Seek"
+                    />
+                    <div className="flex items-center justify-between">
+                      <span className="timecode">{formatClock(currentTime)}</span>
+                      <span className="timecode">{formatClock(duration)}</span>
+                    </div>
+                  </>
                 ) : (
-                  <div className="w-full h-full bg-surface-hover flex items-center justify-center text-xs text-text-muted">
-                    {idx + 1}
+                  <div>
+                    <p className="eyebrow">Narration</p>
+                    <p className="timecode mt-0.5">
+                      {resume ? `Paused at ${formatClock(resume.time)}` : 'Ready to play'}
+                    </p>
                   </div>
                 )}
-              </button>
-            ))}
-          </div>
-        </div>
-      ) : content.type === 'song' ? (
-        <div className="song-viewer space-y-6">
-          {/* Song metadata */}
-          <div className="flex flex-wrap gap-3 items-center">
-            {!!content.metadata?.artist_style && (
-              <span className="px-3 py-1 bg-purple-500/20 text-purple-300 rounded-full text-sm font-medium">
-                🎤 {String(content.metadata.artist_style)}
-              </span>
-            )}
-            {!!content.metadata?.genre && (
-              <span className="px-3 py-1 bg-blue-500/20 text-blue-300 rounded-full text-sm font-medium">
-                🎵 {String(content.metadata.genre)}
-              </span>
-            )}
-            {!!content.metadata?.duration && (
-              <span className="px-3 py-1 bg-green-500/20 text-green-300 rounded-full text-sm font-medium">
-                ⏱ {String(content.metadata.duration)}
-              </span>
-            )}
-          </div>
-
-          {/* Lyrics */}
-          {!!content.metadata?.lyrics && (
-            <div className="bg-surface border border-border rounded-xl p-6">
-              <h3 className="text-lg font-semibold text-atlas-400 mb-4 flex items-center gap-2">
-                📝 Lyrics
-              </h3>
-              <div className="text-text-secondary whitespace-pre-line leading-relaxed font-mono text-sm">
-                {String(content.metadata.lyrics).split('\n').map((line: string, i: number) => (
-                  <div key={i} className={line.startsWith('[') ? 'text-atlas-400 font-bold mt-4 mb-1' : line.trim() === '' ? 'h-2' : ''}>
-                    {line}
-                  </div>
-                ))}
               </div>
-            </div>
-          )}
 
-          {/* Song content/description if any */}
-          {content.content && (
-            <article className="prose-reading prose prose-invert max-w-none" style={{ fontFamily: "'Times New Roman', Times, Georgia, serif" }}>
-              <ReactMarkdown>{content.content}</ReactMarkdown>
-            </article>
+              {isCurrent && (
+                <div className="hidden items-center gap-0.5 sm:flex">
+                  <button onClick={() => skip(-15)} className="btn-icon" aria-label="Back 15 seconds">
+                    <RotateCcw className="h-4 w-4" />
+                  </button>
+                  <button onClick={() => skip(30)} className="btn-icon" aria-label="Forward 30 seconds">
+                    <RotateCw className="h-4 w-4" />
+                  </button>
+                </div>
+              )}
+            </div>
+
+            <div className="mt-4 flex flex-wrap gap-2 border-t border-hairline pt-4">
+              <DownloadButton
+                id={content.id}
+                title={content.title}
+                variant="primary"
+                label="Download audio"
+              />
+              <button
+                onClick={handleQueue}
+                className={`btn-quiet ${justQueued ? 'border-amber/50 text-amber' : ''}`}
+              >
+                {justQueued ? <Check className="h-4 w-4" /> : <ListPlus className="h-4 w-4" />}
+                {justQueued ? 'Queued' : 'Add to queue'}
+              </button>
+            </div>
+          </section>
+        ) : (
+          content.content && (
+            <section className="mb-8 flex flex-wrap items-center gap-2 rounded-lg border border-dashed border-hairline p-4">
+              <p className="mr-auto text-sm text-ink-dim">
+                No narration yet. Generate it once and it stays in the archive.
+              </p>
+              <button onClick={generateSpeech} disabled={generating} className="btn-primary">
+                {generating ? (
+                  <Loader2 className="h-4 w-4 animate-spin" />
+                ) : (
+                  <Headphones className="h-4 w-4" />
+                )}
+                {generating ? 'Generating narration' : 'Generate narration'}
+              </button>
+            </section>
+          )
+        )}
+
+        <div className="mb-10 flex flex-wrap items-center gap-2">
+          <button onClick={() => setShowChat(true)} className="btn-quiet">
+            <MessageCircle className="h-4 w-4" />
+            Discuss
+          </button>
+          {!content.image_url && content.content && (
+            <button onClick={generateArtwork} disabled={generatingArtwork} className="btn-quiet">
+              {generatingArtwork ? (
+                <Loader2 className="h-4 w-4 animate-spin" />
+              ) : (
+                <Palette className="h-4 w-4" />
+              )}
+              {generatingArtwork ? 'Making artwork' : 'Generate artwork'}
+            </button>
           )}
         </div>
-      ) : (
-        <article className="prose-reading prose prose-invert max-w-none" style={{ fontFamily: "'Times New Roman', Times, Georgia, serif" }}>
-          <ReactMarkdown>{content.content || ''}</ReactMarkdown>
-        </article>
-      )}
 
-      {/* Chat Panel */}
+        {error && (
+          <p className="mb-8 rounded-md border border-rust/40 bg-rust/10 px-4 py-3 text-sm text-rust">
+            {error}
+          </p>
+        )}
+
+        {/* Body */}
+        {content.type === 'story' && content.pages?.length ? (
+          <StoryViewer pages={content.pages} page={currentPage} onPage={setCurrentPage} />
+        ) : (
+          <>
+            {lyrics && (
+              <section className="mb-10 rounded-lg border border-hairline bg-panel p-5">
+                <p className="eyebrow mb-4">Lyrics</p>
+                <div className="font-serif text-[1.02rem] leading-relaxed">
+                  {lyrics.split('\n').map((line, i) => (
+                    <div
+                      key={i}
+                      className={
+                        line.startsWith('[')
+                          ? 'eyebrow mb-1 mt-5 first:mt-0'
+                          : line.trim() === ''
+                            ? 'h-3'
+                            : 'text-ink-dim'
+                      }
+                    >
+                      {line}
+                    </div>
+                  ))}
+                </div>
+              </section>
+            )}
+
+            {content.content && (
+              <div className="reading">
+                <ReactMarkdown>{content.content}</ReactMarkdown>
+              </div>
+            )}
+          </>
+        )}
+      </article>
+
       {showChat && (
         <ChatPanel
           contentId={content.id}
@@ -612,6 +396,83 @@ export default function Reader() {
           initialMessages={content.chat || []}
         />
       )}
+    </>
+  )
+}
+
+function StoryViewer({
+  pages,
+  page,
+  onPage,
+}: {
+  pages: StoryPage[]
+  page: number
+  onPage: (n: number) => void
+}) {
+  const current = pages[page]
+  const src = current?.image_url
+    ? current.image_url
+    : current?.image_base64
+      ? `data:image/png;base64,${current.image_base64}`
+      : null
+
+  return (
+    <div>
+      <div className="mb-4 overflow-hidden rounded-lg border border-hairline bg-panel">
+        {src ? (
+          <img src={src} alt={`Page ${page + 1}`} className="w-full" />
+        ) : (
+          <div className="flex h-80 items-center justify-center text-sm text-ink-mute">
+            No image on this page
+          </div>
+        )}
+      </div>
+
+      <div className="mb-6 flex items-center justify-between">
+        <button onClick={() => onPage(Math.max(0, page - 1))} disabled={page === 0} className="btn-quiet">
+          <ChevronLeft className="h-4 w-4" />
+          Previous
+        </button>
+        <span className="timecode">
+          {page + 1} / {pages.length}
+        </span>
+        <button
+          onClick={() => onPage(Math.min(pages.length - 1, page + 1))}
+          disabled={page === pages.length - 1}
+          className="btn-quiet"
+        >
+          Next
+          <ChevronRight className="h-4 w-4" />
+        </button>
+      </div>
+
+      {current?.narration_text && (
+        <div className="mb-6 rounded-lg border border-hairline bg-panel p-4">
+          <p className="eyebrow mb-2">Narration</p>
+          <p className="font-serif leading-relaxed text-ink-dim">{current.narration_text}</p>
+        </div>
+      )}
+
+      <div className="hide-scrollbar flex gap-2 overflow-x-auto pb-2">
+        {pages.map((p, i) => {
+          const thumb = p.image_url || (p.image_base64 ? `data:image/png;base64,${p.image_base64}` : null)
+          return (
+            <button
+              key={p.id}
+              onClick={() => onPage(i)}
+              className={`h-14 w-14 flex-shrink-0 overflow-hidden rounded border-2 transition-colors ${
+                i === page ? 'border-amber' : 'border-hairline hover:border-ink-mute'
+              }`}
+            >
+              {thumb ? (
+                <img src={thumb} alt="" className="h-full w-full object-cover" />
+              ) : (
+                <span className="timecode">{i + 1}</span>
+              )}
+            </button>
+          )
+        })}
+      </div>
     </div>
   )
 }

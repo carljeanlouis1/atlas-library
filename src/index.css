@@ -2,173 +2,432 @@
 @tailwind components;
 @tailwind utilities;
 
-/* Custom scrollbar */
-::-webkit-scrollbar {
-  width: 8px;
-  height: 8px;
+/* ------------------------------------------------------------------ *
+ * Tokens. Night is the default; Daylight is the reading-in-daytime
+ * inverse. Values are raw RGB channels so Tailwind opacity works.
+ * ------------------------------------------------------------------ */
+:root,
+:root[data-theme='night'] {
+  --ground: 23 19 16;
+  --panel: 31 26 22;
+  --raise: 40 33 25;
+  --hairline: 51 42 34;
+  --ink: 244 238 228;
+  --ink-dim: 176 163 149;
+  --ink-mute: 122 109 96;
+  --amber: 240 163 66;
+  --rust: 196 85 47;
+  --grain: 0.045;
+  color-scheme: dark;
 }
 
-::-webkit-scrollbar-track {
-  background: #0a0a0a;
+:root[data-theme='daylight'] {
+  --ground: 239 234 225;
+  --panel: 247 243 236;
+  --raise: 230 223 210;
+  --hairline: 217 208 192;
+  --ink: 34 28 22;
+  --ink-dim: 92 82 71;
+  --ink-mute: 138 126 112;
+  --amber: 176 106 20;
+  --rust: 160 62 30;
+  --grain: 0.03;
+  color-scheme: light;
 }
 
-::-webkit-scrollbar-thumb {
-  background: #262626;
-  border-radius: 4px;
+@layer base {
+  * {
+    border-color: rgb(var(--hairline));
+  }
+
+  html {
+    scroll-behavior: smooth;
+    -webkit-text-size-adjust: 100%;
+  }
+
+  body {
+    @apply bg-ground text-ink font-sans antialiased;
+    font-synthesis-weight: none;
+  }
+
+  /* Lamplit paper: a faint grain over the ground so large flat areas
+     have some tooth instead of reading as a flat panel. */
+  body::before {
+    content: '';
+    position: fixed;
+    inset: 0;
+    z-index: 0;
+    pointer-events: none;
+    opacity: var(--grain);
+    background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='140' height='140'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.85' numOctaves='3'/%3E%3C/filter%3E%3Crect width='140' height='140' filter='url(%23n)'/%3E%3C/svg%3E");
+  }
+
+  ::selection {
+    background: rgb(var(--amber) / 0.28);
+  }
+
+  :focus-visible {
+    outline: 2px solid rgb(var(--amber));
+    outline-offset: 2px;
+    border-radius: 3px;
+  }
+
+  ::-webkit-scrollbar {
+    width: 10px;
+    height: 10px;
+  }
+  ::-webkit-scrollbar-track {
+    background: transparent;
+  }
+  ::-webkit-scrollbar-thumb {
+    background: rgb(var(--hairline));
+    border: 3px solid rgb(var(--ground));
+    border-radius: 99px;
+  }
+  ::-webkit-scrollbar-thumb:hover {
+    background: rgb(var(--ink-mute));
+  }
 }
 
-::-webkit-scrollbar-thumb:hover {
-  background: #404040;
+@layer components {
+  /* Station lettering: wide Archivo, tracked out, used for the wordmark
+     and for section eyebrows. Sparing by design. */
+  .ident {
+    font-family: 'Archivo', system-ui, sans-serif;
+    font-variation-settings: 'wdth' 125;
+    font-weight: 700;
+    letter-spacing: 0.22em;
+    text-transform: uppercase;
+  }
+
+  .eyebrow {
+    font-family: 'Archivo', system-ui, sans-serif;
+    font-variation-settings: 'wdth' 118;
+    font-weight: 600;
+    font-size: 0.6875rem;
+    letter-spacing: 0.16em;
+    text-transform: uppercase;
+    @apply text-ink-mute;
+  }
+
+  /* An eyebrow that runs a hairline out to the end of its row. */
+  .eyebrow-rule {
+    @apply flex items-center gap-3;
+  }
+  .eyebrow-rule::after {
+    content: '';
+    @apply h-px flex-1 bg-hairline;
+  }
+
+  .timecode {
+    @apply font-mono text-2xs text-ink-mute;
+    font-variant-numeric: tabular-nums;
+  }
+
+  .panel {
+    @apply bg-panel border border-hairline rounded-lg;
+  }
+
+  .btn {
+    @apply inline-flex items-center justify-center gap-2 rounded-md text-sm font-medium
+           transition-colors duration-150 disabled:opacity-40 disabled:pointer-events-none;
+  }
+  .btn-primary {
+    @apply btn bg-amber text-ground px-4 py-2 hover:brightness-110;
+  }
+  .btn-quiet {
+    @apply btn border border-hairline bg-panel px-4 py-2 text-ink-dim
+           hover:text-ink hover:border-ink-mute;
+  }
+  .btn-icon {
+    @apply btn h-9 w-9 rounded-md text-ink-mute hover:text-ink hover:bg-raise;
+  }
+
+  .chip {
+    @apply inline-flex items-center gap-1.5 rounded-full border border-hairline
+           px-3 py-1 text-2xs uppercase tracking-eyebrow text-ink-dim
+           transition-colors hover:border-ink-mute hover:text-ink;
+    font-variation-settings: 'wdth' 110;
+    font-weight: 600;
+  }
+  .chip-on {
+    @apply border-amber bg-amber/15 text-amber;
+  }
 }
 
-/* Smooth scrolling */
-html {
-  scroll-behavior: smooth;
+/* ------------------------------------------------------------------ *
+ * Long-form reading
+ * ------------------------------------------------------------------ */
+.reading {
+  font-family: 'Newsreader', Georgia, serif;
+  font-size: 1.1875rem;
+  line-height: 1.72;
+  font-weight: 400;
+  @apply text-ink;
+  font-variation-settings: 'opsz' 16;
 }
 
-/* Reading typography - Times New Roman style */
-.prose-reading {
-  font-family: 'Times New Roman', Times, Georgia, serif;
-  line-height: 1.8;
+.reading p {
+  margin-bottom: 1.35em;
+  text-wrap: pretty;
 }
 
-.prose-reading p {
-  @apply mb-5;
+.reading h1,
+.reading h2,
+.reading h3,
+.reading h4 {
+  font-family: 'Newsreader', Georgia, serif;
+  font-variation-settings: 'opsz' 36;
+  @apply text-ink;
+  text-wrap: balance;
 }
 
-.prose-reading h1 {
-  font-family: 'Times New Roman', Times, Georgia, serif;
-  @apply text-2xl font-bold mb-5 mt-10;
+.reading h1 {
+  font-size: 1.9em;
+  font-weight: 600;
+  line-height: 1.15;
+  margin: 1.8em 0 0.5em;
+}
+.reading h2 {
+  font-size: 1.42em;
+  font-weight: 600;
+  line-height: 1.2;
+  margin: 1.7em 0 0.45em;
+}
+.reading h3 {
+  font-size: 1.16em;
+  font-weight: 600;
+  margin: 1.5em 0 0.35em;
+}
+.reading h4 {
+  font-size: 1em;
+  font-weight: 700;
+  margin: 1.4em 0 0.3em;
 }
 
-.prose-reading h2 {
-  font-family: 'Times New Roman', Times, Georgia, serif;
-  @apply text-xl font-semibold mb-4 mt-8;
+.reading strong {
+  font-weight: 700;
+  @apply text-ink;
+}
+.reading em {
+  font-style: italic;
 }
 
-.prose-reading h3 {
-  font-family: 'Times New Roman', Times, Georgia, serif;
-  @apply text-lg font-medium mb-3 mt-6;
+.reading a {
+  @apply text-amber;
+  text-decoration: underline;
+  text-underline-offset: 3px;
+  text-decoration-thickness: 1px;
+  text-decoration-color: rgb(var(--amber) / 0.45);
+}
+.reading a:hover {
+  text-decoration-color: rgb(var(--amber));
 }
 
-/* Audio player styling */
-.audio-player {
-  @apply bg-surface rounded-lg p-4;
+.reading ul,
+.reading ol {
+  margin: 0 0 1.35em 1.25em;
+}
+.reading ul {
+  list-style: disc;
+}
+.reading ol {
+  list-style: decimal;
+}
+.reading li {
+  margin-bottom: 0.5em;
+  padding-left: 0.25em;
+}
+.reading li::marker {
+  @apply text-ink-mute;
 }
 
-/* Custom range slider for audio */
-input[type="range"].audio-slider {
+.reading blockquote {
+  margin: 1.6em 0;
+  padding-left: 1.15em;
+  border-left: 2px solid rgb(var(--amber) / 0.5);
+  font-style: italic;
+  @apply text-ink-dim;
+}
+
+.reading hr {
+  margin: 2.4em auto;
+  width: 4rem;
+  border: 0;
+  border-top: 1px solid rgb(var(--hairline));
+}
+
+.reading code {
+  font-family: 'Space Mono', monospace;
+  font-size: 0.82em;
+  @apply text-amber bg-raise rounded px-1.5 py-0.5;
+}
+
+.reading pre {
+  @apply bg-panel border border-hairline rounded-lg p-4 overflow-x-auto mb-6;
+}
+.reading pre code {
+  @apply bg-transparent p-0 text-ink;
+  font-size: 0.8em;
+}
+
+.reading table {
+  width: 100%;
+  margin-bottom: 1.5em;
+  border-collapse: collapse;
+  font-family: 'Archivo', sans-serif;
+  font-size: 0.9rem;
+}
+.reading th,
+.reading td {
+  border-bottom: 1px solid rgb(var(--hairline));
+  padding: 0.6em 0.75em;
+  text-align: left;
+}
+.reading th {
+  @apply text-ink-mute uppercase tracking-eyebrow text-2xs;
+}
+
+.reading img {
+  @apply rounded-lg my-8 w-full;
+}
+
+/* Reader font-size preference, set on <html> before first paint. */
+html.font-size-sm .reading {
+  font-size: 1.0625rem;
+  line-height: 1.68;
+}
+html.font-size-md .reading {
+  font-size: 1.1875rem;
+  line-height: 1.72;
+}
+html.font-size-lg .reading {
+  font-size: 1.3125rem;
+  line-height: 1.78;
+}
+
+/* ------------------------------------------------------------------ *
+ * Transport slider. --fill (0-100) paints the elapsed portion.
+ * ------------------------------------------------------------------ */
+input[type='range'].transport {
   -webkit-appearance: none;
   appearance: none;
-  background: transparent;
-  cursor: pointer;
   width: 100%;
-  height: 44px; /* Large touch target for mobile */
+  height: 26px;
   margin: 0;
   padding: 0;
   display: block;
-  touch-action: none; /* Prevent scroll interference on mobile */
+  background: transparent;
+  cursor: pointer;
+  touch-action: none;
 }
 
-input[type="range"].audio-slider::-webkit-slider-runnable-track {
-  height: 6px;
-  background: #262626;
-  border-radius: 3px;
+input[type='range'].transport::-webkit-slider-runnable-track {
+  height: 3px;
+  border-radius: 99px;
+  background: linear-gradient(
+    to right,
+    rgb(var(--amber)) var(--fill, 0%),
+    rgb(var(--hairline)) var(--fill, 0%)
+  );
 }
 
-input[type="range"].audio-slider::-webkit-slider-thumb {
+input[type='range'].transport::-webkit-slider-thumb {
   -webkit-appearance: none;
   appearance: none;
-  width: 22px;
-  height: 22px;
-  background: #60a5fa;
+  width: 12px;
+  height: 12px;
+  margin-top: -4.5px;
   border-radius: 50%;
-  margin-top: -8px;
-  border: 2px solid #1e1e1e;
-  box-shadow: 0 1px 4px rgba(0,0,0,0.3);
-  cursor: pointer;
-  transition: transform 0.1s ease;
+  background: rgb(var(--amber));
+  box-shadow: 0 0 0 4px rgb(var(--ground));
+  transition: transform 0.12s ease;
 }
 
-input[type="range"].audio-slider::-webkit-slider-thumb:hover {
-  transform: scale(1.2);
+input[type='range'].transport:hover::-webkit-slider-thumb,
+input[type='range'].transport:active::-webkit-slider-thumb {
+  transform: scale(1.25);
 }
 
-input[type="range"].audio-slider::-webkit-slider-thumb:active {
-  transform: scale(1.1);
-  background: #3b82f6;
+input[type='range'].transport::-moz-range-track {
+  height: 3px;
+  border-radius: 99px;
+  background: rgb(var(--hairline));
 }
-
-/* Firefox */
-input[type="range"].audio-slider::-moz-range-track {
-  height: 6px;
-  background: #262626;
-  border-radius: 3px;
+input[type='range'].transport::-moz-range-progress {
+  height: 3px;
+  border-radius: 99px;
+  background: rgb(var(--amber));
 }
-
-input[type="range"].audio-slider::-moz-range-thumb {
-  width: 22px;
-  height: 22px;
-  background: #60a5fa;
+input[type='range'].transport::-moz-range-thumb {
+  width: 12px;
+  height: 12px;
   border: none;
   border-radius: 50%;
+  background: rgb(var(--amber));
+}
+
+/* Older markup still shipping .audio-slider gets the same treatment. */
+input[type='range'].audio-slider {
+  -webkit-appearance: none;
+  appearance: none;
+  width: 100%;
+  height: 26px;
+  background: transparent;
   cursor: pointer;
+  touch-action: none;
+}
+input[type='range'].audio-slider::-webkit-slider-runnable-track {
+  height: 3px;
+  border-radius: 99px;
+  background: rgb(var(--hairline));
+}
+input[type='range'].audio-slider::-webkit-slider-thumb {
+  -webkit-appearance: none;
+  appearance: none;
+  width: 12px;
+  height: 12px;
+  margin-top: -4.5px;
+  border-radius: 50%;
+  background: rgb(var(--amber));
 }
 
-input[type="range"].audio-slider::-moz-range-thumb:hover {
-  transform: scale(1.2);
+/* ------------------------------------------------------------------ *
+ * Utilities
+ * ------------------------------------------------------------------ */
+.tabnum {
+  font-variant-numeric: tabular-nums;
 }
 
-/* Focus states for accessibility */
-input[type="range"].audio-slider:focus {
-  outline: none;
+.hide-scrollbar {
+  scrollbar-width: none;
+}
+.hide-scrollbar::-webkit-scrollbar {
+  display: none;
 }
 
-input[type="range"].audio-slider:focus::-webkit-slider-thumb {
-  box-shadow: 0 0 0 3px rgba(96, 165, 250, 0.3);
+.line-clamp-2 {
+  display: -webkit-box;
+  -webkit-line-clamp: 2;
+  -webkit-box-orient: vertical;
+  overflow: hidden;
 }
 
-/* Tag pills */
-.tag-pill {
-  @apply px-2 py-0.5 text-xs font-medium rounded-full bg-atlas-900/50 text-atlas-300 border border-atlas-700/30;
+/* Content sits above the grain layer. */
+#root {
+  position: relative;
+  z-index: 1;
 }
 
-/* Glass effect */
-.glass {
-  @apply bg-surface/80 backdrop-blur-lg border border-border;
-}
-
-/* Content card hover */
-.content-card {
-  @apply transition-all duration-200 hover:bg-surface-hover hover:border-atlas-700/30;
-}
-
-/* Font size controls - applied globally */
-html.font-size-sm .prose-reading,
-html.font-size-sm .prose-reading p,
-html.font-size-sm .prose-reading li,
-html.font-size-sm article {
-  font-size: 0.9rem !important;
-  line-height: 1.7 !important;
-}
-
-html.font-size-md .prose-reading,
-html.font-size-md .prose-reading p,
-html.font-size-md .prose-reading li,
-html.font-size-md article {
-  font-size: 1rem !important;
-  line-height: 1.8 !important;
-}
-
-html.font-size-lg .prose-reading,
-html.font-size-lg .prose-reading p,
-html.font-size-lg .prose-reading li,
-html.font-size-lg article {
-  font-size: 1.15rem !important;
-  line-height: 1.9 !important;
-}
-
-/* Apply serif font to all content reading areas */
-article, .content-text {
-  font-family: 'Times New Roman', Times, Georgia, serif;
+@media (prefers-reduced-motion: reduce) {
+  html {
+    scroll-behavior: auto;
+  }
+  *,
+  *::before,
+  *::after {
+    animation-duration: 0.001ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.001ms !important;
+  }
 }

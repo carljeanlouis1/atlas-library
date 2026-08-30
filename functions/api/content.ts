@@ -27,12 +27,24 @@ interface ContentRequest {
 export const onRequestGet: PagesFunction<Env> = async (context) => {
   const url = new URL(context.request.url);
   const type = url.searchParams.get('type');
-  const limit = parseInt(url.searchParams.get('limit') || '20');
+  const requestedLimit = parseInt(url.searchParams.get('limit') || '20');
   const offset = parseInt(url.searchParams.get('offset') || '0');
 
   const search = url.searchParams.get('search');
 
-  let query = 'SELECT * FROM content';
+  // ?list=1 returns a lightweight projection: enough to render the archive
+  // (title, type, dates, audio, artwork, a short excerpt and the body length
+  // for read-time estimates) without shipping every essay in full.
+  const slim = url.searchParams.get('list') === '1';
+  const safeLimit = Number.isFinite(requestedLimit) && requestedLimit > 0 ? requestedLimit : 20;
+  const limit = slim ? Math.min(safeLimit, 1000) : safeLimit;
+
+  const columns = slim
+    ? `id, type, title, audio_url, image_url, metadata, created_at, updated_at,
+       substr(content, 1, 220) AS excerpt, length(content) AS content_length`
+    : '*';
+
+  let query = `SELECT ${columns} FROM content`;
   const params: unknown[] = [];
   const conditions: string[] = [];
 

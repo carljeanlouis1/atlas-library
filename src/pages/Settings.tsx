@@ -1,185 +1,211 @@
 import { useState, useRef, useEffect } from 'react'
-import { Volume2, Play, Pause, Check, Loader2 } from 'lucide-react'
+import { Play, Pause, Check, Loader2, Sun, Moon } from 'lucide-react'
+import { useTheme } from '../lib/theme'
+import { useAudioQueue } from '../contexts/AudioQueueContext'
 
-interface Voice {
-  id: string
-  name: string
-  gender: 'female' | 'male' | 'neutral'
-  description: string
-}
-
-const voices: Voice[] = [
-  { id: 'nova', name: 'Nova', gender: 'female', description: 'Warm and friendly female voice' },
-  { id: 'shimmer', name: 'Shimmer', gender: 'female', description: 'Soft and expressive female voice' },
-  { id: 'alloy', name: 'Alloy', gender: 'neutral', description: 'Neutral, balanced voice' },
-  { id: 'echo', name: 'Echo', gender: 'male', description: 'Clear male voice' },
-  { id: 'fable', name: 'Fable', gender: 'male', description: 'British-accented male voice' },
-  { id: 'onyx', name: 'Onyx', gender: 'male', description: 'Deep, authoritative male voice' },
+const VOICES = [
+  { id: 'nova', name: 'Nova', note: 'Warm, even-tempered' },
+  { id: 'shimmer', name: 'Shimmer', note: 'Soft, expressive' },
+  { id: 'alloy', name: 'Alloy', note: 'Neutral and level' },
+  { id: 'echo', name: 'Echo', note: 'Clear, unhurried' },
+  { id: 'fable', name: 'Fable', note: 'British, storytelling' },
+  { id: 'onyx', name: 'Onyx', note: 'Deep, authoritative' },
 ]
 
-const fontSizes = [
+const FONT_SIZES = [
   { id: 'sm', label: 'Small' },
   { id: 'md', label: 'Medium' },
   { id: 'lg', label: 'Large' },
 ]
 
+const RATES = [1, 1.25, 1.5, 1.75, 2]
+
+function Section({
+  title,
+  hint,
+  children,
+}: {
+  title: string
+  hint: string
+  children: React.ReactNode
+}) {
+  return (
+    <section className="mb-10">
+      <div className="eyebrow-rule mb-1">
+        <span className="eyebrow">{title}</span>
+      </div>
+      <p className="mb-4 text-sm text-ink-dim">{hint}</p>
+      {children}
+    </section>
+  )
+}
+
 export default function Settings() {
-  const [selectedVoice, setSelectedVoice] = useState(() => 
-    localStorage.getItem('atlas-voice') || 'nova'
-  )
-  const [fontSize, setFontSize] = useState(() =>
-    localStorage.getItem('atlas-font-size') || 'md'
-  )
-  const [previewingVoice, setPreviewingVoice] = useState<string | null>(null)
+  const { theme, toggle } = useTheme()
+  const { rate, setRate } = useAudioQueue()
+  const [voice, setVoice] = useState(() => localStorage.getItem('atlas-voice') || 'nova')
+  const [fontSize, setFontSize] = useState(() => localStorage.getItem('atlas-font-size') || 'md')
+  const [previewing, setPreviewing] = useState<string | null>(null)
   const [loadingPreview, setLoadingPreview] = useState(false)
   const audioRef = useRef<HTMLAudioElement>(null)
 
-  // Apply font size to document
   useEffect(() => {
     document.documentElement.classList.remove('font-size-sm', 'font-size-md', 'font-size-lg')
     document.documentElement.classList.add(`font-size-${fontSize}`)
     localStorage.setItem('atlas-font-size', fontSize)
   }, [fontSize])
 
-  const saveVoice = (voiceId: string) => {
-    setSelectedVoice(voiceId)
-    localStorage.setItem('atlas-voice', voiceId)
+  const chooseVoice = (id: string) => {
+    setVoice(id)
+    localStorage.setItem('atlas-voice', id)
   }
 
-  const previewVoice = async (voiceId: string) => {
-    if (previewingVoice === voiceId) {
+  const previewVoice = async (id: string) => {
+    if (previewing === id) {
       audioRef.current?.pause()
-      setPreviewingVoice(null)
+      setPreviewing(null)
       return
     }
-
     setLoadingPreview(true)
-    setPreviewingVoice(voiceId)
-
+    setPreviewing(id)
     try {
-      // Generate a short preview
       const response = await fetch('/api/voice-preview', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
-          voice: voiceId,
-          text: 'Hello! This is how I sound when reading your content in the Atlas Library.'
-        })
+          voice: id,
+          text: 'This is how I sound reading the morning brief.',
+        }),
       })
-
       const data = await response.json()
       if (data.audioUrl && audioRef.current) {
         audioRef.current.src = data.audioUrl
-        audioRef.current.play()
+        audioRef.current.play().catch(() => {})
+      } else {
+        setPreviewing(null)
       }
-    } catch (err) {
-      console.error('Preview failed:', err)
+    } catch {
+      setPreviewing(null)
     }
     setLoadingPreview(false)
   }
 
   return (
-    <div className="max-w-2xl mx-auto px-4 py-8">
-      <h1 className="text-2xl font-bold mb-8">Settings</h1>
+    <div className="mx-auto max-w-2xl px-4 py-8 sm:px-6 sm:py-10">
+      <h1 className="mb-8 font-serif text-3xl leading-tight sm:text-4xl">Settings</h1>
 
-      {/* Hidden audio element for previews */}
-      <audio ref={audioRef} onEnded={() => setPreviewingVoice(null)} />
+      <audio ref={audioRef} onEnded={() => setPreviewing(null)} />
 
-      {/* Voice Selection */}
-      <section className="mb-12">
-        <h2 className="text-lg font-semibold mb-2">Text-to-Speech Voice</h2>
-        <p className="text-text-secondary text-sm mb-4">
-          Choose the default voice for converting text to speech.
-        </p>
+      <Section title="Appearance" hint="Night for the small hours, Daylight for reading in a lit room.">
+        <button
+          onClick={toggle}
+          className="flex w-full items-center justify-between rounded-lg border border-hairline bg-panel p-4 text-left transition-colors hover:border-ink-mute"
+        >
+          <span className="flex items-center gap-3">
+            {theme === 'night' ? <Moon className="h-4 w-4 text-amber" /> : <Sun className="h-4 w-4 text-amber" />}
+            <span className="font-serif text-lg capitalize">{theme}</span>
+          </span>
+          <span className="eyebrow">Switch to {theme === 'night' ? 'daylight' : 'night'}</span>
+        </button>
+      </Section>
 
-        <div className="space-y-2">
-          {voices.map((voice) => (
+      <Section title="Playback speed" hint="Applies to everything the player plays, and it sticks.">
+        <div className="flex gap-2">
+          {RATES.map((r) => (
+            <button
+              key={r}
+              onClick={() => setRate(r)}
+              className={`chip flex-1 justify-center py-2 ${rate === r ? 'chip-on' : ''}`}
+            >
+              {r}x
+            </button>
+          ))}
+        </div>
+      </Section>
+
+      <Section title="Narration voice" hint="Used when you generate narration for something new.">
+        <div className="overflow-hidden rounded-lg border border-hairline">
+          {VOICES.map((v) => (
             <div
-              key={voice.id}
-              onClick={() => saveVoice(voice.id)}
-              className={`flex items-center justify-between p-4 rounded-xl border cursor-pointer transition-all ${
-                selectedVoice === voice.id
-                  ? 'bg-atlas-500/10 border-atlas-500'
-                  : 'bg-surface border-border hover:border-atlas-700/50'
+              key={v.id}
+              onClick={() => chooseVoice(v.id)}
+              className={`flex cursor-pointer items-center gap-3 border-b border-hairline p-4 last:border-0 transition-colors ${
+                voice === v.id ? 'bg-amber/[0.07]' : 'bg-panel hover:bg-raise'
               }`}
             >
-              <div className="flex items-center gap-3">
-                <div className={`w-5 h-5 rounded-full border-2 flex items-center justify-center ${
-                  selectedVoice === voice.id ? 'border-atlas-500 bg-atlas-500' : 'border-border'
-                }`}>
-                  {selectedVoice === voice.id && <Check className="w-3 h-3 text-white" />}
-                </div>
-                <div>
-                  <div className="font-medium flex items-center gap-2">
-                    {voice.name}
-                    <span className={`text-xs px-2 py-0.5 rounded-full ${
-                      voice.gender === 'female' ? 'bg-pink-500/20 text-pink-400' :
-                      voice.gender === 'male' ? 'bg-blue-500/20 text-blue-400' :
-                      'bg-gray-500/20 text-gray-400'
-                    }`}>
-                      {voice.gender}
-                    </span>
-                  </div>
-                  <div className="text-sm text-text-muted">{voice.description}</div>
-                </div>
-              </div>
+              <span
+                className={`flex h-4 w-4 flex-shrink-0 items-center justify-center rounded-full border ${
+                  voice === v.id ? 'border-amber bg-amber' : 'border-hairline'
+                }`}
+              >
+                {voice === v.id && <Check className="h-2.5 w-2.5 text-ground" />}
+              </span>
+              <span className="min-w-0 flex-1">
+                <span className="block font-serif text-lg leading-tight">{v.name}</span>
+                <span className="eyebrow">{v.note}</span>
+              </span>
               <button
                 onClick={(e) => {
                   e.stopPropagation()
-                  previewVoice(voice.id)
+                  previewVoice(v.id)
                 }}
-                className="p-2 hover:bg-surface-hover rounded-lg transition-colors"
-                title="Preview voice"
+                className="btn-icon"
+                aria-label={`Preview ${v.name}`}
               >
-                {loadingPreview && previewingVoice === voice.id ? (
-                  <Loader2 className="w-5 h-5 animate-spin text-atlas-400" />
-                ) : previewingVoice === voice.id ? (
-                  <Pause className="w-5 h-5 text-atlas-400" />
+                {loadingPreview && previewing === v.id ? (
+                  <Loader2 className="h-4 w-4 animate-spin text-amber" />
+                ) : previewing === v.id ? (
+                  <Pause className="h-4 w-4 text-amber" />
                 ) : (
-                  <Play className="w-5 h-5 text-text-muted" />
+                  <Play className="h-4 w-4" />
                 )}
               </button>
             </div>
           ))}
         </div>
-      </section>
+      </Section>
 
-      {/* Font Size */}
-      <section className="mb-12">
-        <h2 className="text-lg font-semibold mb-2">Reading Font Size</h2>
-        <p className="text-text-secondary text-sm mb-4">
-          Adjust the text size for reading content.
-        </p>
-
+      <Section title="Reading size" hint="Changes the body text on every article.">
         <div className="flex gap-2">
-          {fontSizes.map((size) => (
+          {FONT_SIZES.map((size) => (
             <button
               key={size.id}
               onClick={() => setFontSize(size.id)}
-              className={`flex-1 py-3 px-4 rounded-xl border transition-all ${
-                fontSize === size.id
-                  ? 'bg-atlas-500/10 border-atlas-500 text-atlas-400'
-                  : 'bg-surface border-border hover:border-atlas-700/50'
-              }`}
+              className={`chip flex-1 justify-center py-2 ${fontSize === size.id ? 'chip-on' : ''}`}
             >
               {size.label}
             </button>
           ))}
         </div>
 
-        {/* Preview */}
-        <div className="mt-4 p-4 bg-surface border border-border rounded-xl">
-          <p className="text-text-muted text-sm mb-2">Preview:</p>
-          <p className={`prose-reading font-size-${fontSize}`}>
-            The agents in Minecraft didn't know they were in a simulation. Maya Chen hadn't worn real clothes in three weeks.
+        <div className="mt-4 rounded-lg border border-hairline bg-panel p-4">
+          <p className="reading mb-0">
+            The agents did not know they were in a simulation. Maya Chen had not worn real clothes in
+            three weeks.
           </p>
         </div>
-      </section>
+      </Section>
 
-      {/* Save confirmation */}
-      <div className="text-center text-sm text-text-muted">
-        Settings are saved automatically.
-      </div>
+      <Section title="Keyboard" hint="Anywhere in the library.">
+        <div className="overflow-hidden rounded-lg border border-hairline bg-panel">
+          {[
+            ['/  or  cmd K', 'Search the archive'],
+            ['space', 'Play or pause'],
+            ['enter', 'Open the highlighted result'],
+            ['cmd enter', 'Play the highlighted result'],
+          ].map(([key, what]) => (
+            <div
+              key={key}
+              className="flex items-center justify-between border-b border-hairline px-4 py-2.5 last:border-0"
+            >
+              <span className="timecode">{key}</span>
+              <span className="text-sm text-ink-dim">{what}</span>
+            </div>
+          ))}
+        </div>
+      </Section>
+
+      <p className="timecode text-center">Saved as you go</p>
     </div>
   )
 }
