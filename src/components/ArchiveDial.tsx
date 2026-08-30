@@ -91,7 +91,8 @@ export default function ArchiveDial({ items, activeDay, onSelectDay }: ArchiveDi
         className="hide-scrollbar overflow-x-auto rounded-lg border border-hairline bg-panel px-3 pt-3"
         onMouseLeave={() => setHovered(null)}
       >
-        <div className="flex h-11 items-end gap-[2px]">
+        {/* Each tick's target is the whole column, not the 3px bar. */}
+        <div className="flex h-11 items-stretch">
           {ticks.map((tick) => {
             const isActive = tick.day === activeDay
             const height = tick.count === 0 ? 2 : 6 + (tick.count / busiest) * 26
@@ -102,24 +103,28 @@ export default function ArchiveDial({ items, activeDay, onSelectDay }: ArchiveDi
                 onMouseEnter={() => setHovered(tick)}
                 onClick={() => onSelectDay(isActive || tick.count === 0 ? null : tick.day)}
                 disabled={tick.count === 0}
-                aria-label={`${tick.label}, ${tick.count} entries`}
-                className="w-[3px] flex-shrink-0 rounded-full transition-[height,background-color] duration-200 disabled:cursor-default"
-                style={{
-                  height: `${height}px`,
-                  backgroundColor: isActive
-                    ? 'rgb(var(--rust))'
-                    : tick.count === 0
-                      ? 'rgb(var(--hairline))'
-                      : `rgb(var(--amber) / ${strength})`,
-                }}
-              />
+                aria-label={`${tick.label}, ${tick.count} ${tick.count === 1 ? 'entry' : 'entries'}`}
+                className="group flex w-[5px] flex-shrink-0 items-end justify-center disabled:cursor-default"
+              >
+                <span
+                  className="w-[3px] rounded-full transition-[height,background-color] duration-200 group-hover:brightness-125"
+                  style={{
+                    height: `${height}px`,
+                    backgroundColor: isActive
+                      ? 'rgb(var(--rust))'
+                      : tick.count === 0
+                        ? 'rgb(var(--hairline))'
+                        : `rgb(var(--amber) / ${strength})`,
+                  }}
+                />
+              </button>
             )
           })}
         </div>
 
-        <div className="mt-1 flex h-5 gap-[2px]">
+        <div className="mt-1 flex h-5">
           {ticks.map((tick) => (
-            <div key={tick.day} className="relative w-[3px] flex-shrink-0">
+            <div key={tick.day} className="relative w-[5px] flex-shrink-0">
               {tick.monthStart && (
                 <>
                   <span className="absolute left-0 top-0 h-1.5 w-px bg-hairline" />
