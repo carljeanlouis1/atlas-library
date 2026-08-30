@@ -56,6 +56,9 @@ export function useAudioQueue() {
 const STATE_KEY = 'atlas-player-state'
 const RATE_KEY = 'atlas-playback-rate'
 
+/** How far the rewind and fast-forward controls jump. */
+export const SKIP_SECONDS = 10
+
 interface PersistedState {
   current: QueueItem | null
   queue: QueueItem[]
@@ -356,8 +359,9 @@ export function AudioQueueProvider({ children }: { children: ReactNode }) {
     const handlers: [MediaSessionAction, MediaSessionActionHandler][] = [
       ['play', () => { audioRef.current?.play().catch(() => {}); setIsPlaying(true) }],
       ['pause', () => { audioRef.current?.pause(); setIsPlaying(false) }],
-      ['seekbackward', () => skip(-15)],
-      ['seekforward', () => skip(30)],
+      // Some platforms hand us their own offset; honour it when they do.
+      ['seekbackward', (details) => skip(-(details.seekOffset || SKIP_SECONDS))],
+      ['seekforward', (details) => skip(details.seekOffset || SKIP_SECONDS)],
       ['nexttrack', () => skipToNext()],
       ['seekto', (details) => { if (details.seekTime != null) seek(details.seekTime) }],
     ]

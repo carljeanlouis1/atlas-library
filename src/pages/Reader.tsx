@@ -1,13 +1,14 @@
 import { useEffect, useState, useCallback, useMemo } from 'react'
 import { useParams, Link } from 'react-router-dom'
 import {
-  Play, Pause, RotateCcw, RotateCw, MessageCircle, Loader2, ListPlus, Check,
+  Play, Pause, MessageCircle, Loader2, ListPlus, Check,
   ChevronLeft, ChevronRight, Headphones, Palette, ArrowLeft,
 } from 'lucide-react'
 import ReactMarkdown from 'react-markdown'
 import ChatPanel from '../components/ChatPanel'
 import DownloadButton from '../components/DownloadButton'
-import { useAudioQueue } from '../contexts/AudioQueueContext'
+import SkipButton from '../components/SkipButton'
+import { useAudioQueue, SKIP_SECONDS } from '../contexts/AudioQueueContext'
 import { getBookmark, parseMetadata, typeLabel } from '../lib/library'
 import { formatClock, formatFullDate, estimateReadMinutes } from '../lib/format'
 
@@ -284,13 +285,9 @@ export default function Reader() {
               </div>
 
               {isCurrent && (
-                <div className="hidden items-center gap-0.5 sm:flex">
-                  <button onClick={() => skip(-15)} className="btn-icon" aria-label="Back 15 seconds">
-                    <RotateCcw className="h-4 w-4" />
-                  </button>
-                  <button onClick={() => skip(30)} className="btn-icon" aria-label="Forward 30 seconds">
-                    <RotateCw className="h-4 w-4" />
-                  </button>
+                <div className="flex flex-shrink-0 items-center gap-0.5">
+                  <SkipButton direction="back" onClick={() => skip(-SKIP_SECONDS)} />
+                  <SkipButton direction="forward" onClick={() => skip(SKIP_SECONDS)} />
                 </div>
               )}
             </div>

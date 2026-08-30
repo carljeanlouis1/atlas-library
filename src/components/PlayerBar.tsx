@@ -1,13 +1,14 @@
 import { useState } from 'react'
 import { Link } from 'react-router-dom'
 import {
-  Play, Pause, RotateCcw, RotateCw, SkipForward, ListMusic, Bookmark,
+  Play, Pause, SkipForward, ListMusic, Bookmark,
   X, ChevronUp, ChevronDown, Trash2, Gauge, ChevronRight,
 } from 'lucide-react'
-import { useAudioQueue } from '../contexts/AudioQueueContext'
+import { useAudioQueue, SKIP_SECONDS } from '../contexts/AudioQueueContext'
 import { formatClock } from '../lib/format'
 import { typeLabel } from '../lib/library'
 import DownloadButton from './DownloadButton'
+import SkipButton from './SkipButton'
 
 const RATES = [1, 1.25, 1.5, 1.75, 2]
 
@@ -130,7 +131,9 @@ export default function PlayerBar() {
             <span className="timecode w-11 flex-shrink-0">{formatClock(duration)}</span>
           </div>
 
-          <div className="flex items-center gap-1.5 sm:gap-2">
+          {/* On a phone the title takes its own row so every control keeps a
+              real touch target; on a wider screen it all sits in one line. */}
+          <div className="flex flex-col gap-1 sm:flex-row sm:items-center sm:gap-2">
             {/* Now playing */}
             <div className="flex min-w-0 flex-1 items-center gap-3">
               {currentTrack.image_url ? (
@@ -159,24 +162,21 @@ export default function PlayerBar() {
             </div>
 
             {/* Transport controls */}
-            <button onClick={() => skip(-15)} className="btn-icon hidden sm:flex" aria-label="Back 15 seconds">
-              <RotateCcw className="h-4 w-4" />
-            </button>
-            <button
-              onClick={togglePlay}
-              className="btn h-10 w-10 flex-shrink-0 rounded-full bg-amber text-ground hover:brightness-110"
-              aria-label={isPlaying ? 'Pause' : 'Play'}
-            >
-              {isPlaying ? <Pause className="h-4 w-4" /> : <Play className="ml-0.5 h-4 w-4" />}
-            </button>
-            <button onClick={() => skip(30)} className="btn-icon hidden sm:flex" aria-label="Forward 30 seconds">
-              <RotateCw className="h-4 w-4" />
-            </button>
-            {queue.length > 0 && (
-              <button onClick={skipToNext} className="btn-icon hidden sm:flex" aria-label="Next in queue">
-                <SkipForward className="h-4 w-4" />
+            <div className="flex items-center justify-between gap-0.5 sm:justify-end sm:gap-1.5">
+              <SkipButton direction="back" onClick={() => skip(-SKIP_SECONDS)} />
+              <button
+                onClick={togglePlay}
+                className="btn h-11 w-11 flex-shrink-0 rounded-full bg-amber text-ground hover:brightness-110 sm:h-10 sm:w-10"
+                aria-label={isPlaying ? 'Pause' : 'Play'}
+              >
+                {isPlaying ? <Pause className="h-4 w-4" /> : <Play className="ml-0.5 h-4 w-4" />}
               </button>
-            )}
+              <SkipButton direction="forward" onClick={() => skip(SKIP_SECONDS)} />
+              {queue.length > 0 && (
+                <button onClick={skipToNext} className="btn-icon" aria-label="Next in queue">
+                  <SkipForward className="h-4 w-4" />
+                </button>
+              )}
 
             {/* Speed */}
             <div className="relative hidden sm:block">
@@ -205,13 +205,13 @@ export default function PlayerBar() {
                 </div>
               )}
             </div>
-            <button
-              onClick={cycleRate}
-              className={`btn-icon w-auto px-2 sm:hidden ${rate !== 1 ? 'text-amber' : ''}`}
-              aria-label="Change playback speed"
-            >
-              <span className="timecode">{rate}x</span>
-            </button>
+              <button
+                onClick={cycleRate}
+                className={`btn-icon w-auto px-2 sm:hidden ${rate !== 1 ? 'text-amber' : ''}`}
+                aria-label="Change playback speed"
+              >
+                <span className="timecode">{rate}x</span>
+              </button>
 
             <button
               onClick={saveCurrentBookmark}
@@ -243,6 +243,7 @@ export default function PlayerBar() {
             >
               <ChevronRight className="h-4 w-4" />
             </button>
+            </div>
           </div>
         </div>
       </div>

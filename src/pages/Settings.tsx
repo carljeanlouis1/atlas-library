@@ -191,6 +191,8 @@ export default function Settings() {
           {[
             ['/  or  cmd K', 'Search the archive'],
             ['space', 'Play or pause'],
+            ['left arrow', 'Back 10 seconds'],
+            ['right arrow', 'Forward 10 seconds'],
             ['enter', 'Open the highlighted result'],
             ['cmd enter', 'Play the highlighted result'],
           ].map(([key, what]) => (

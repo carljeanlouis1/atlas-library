@@ -1,7 +1,7 @@
 import { useEffect, useState } from 'react'
 import { Outlet, Link, NavLink, useLocation } from 'react-router-dom'
 import { Search, Sun, Moon, Library, Headphones, Disc3, CalendarDays, SlidersHorizontal } from 'lucide-react'
-import { useAudioQueue } from '../contexts/AudioQueueContext'
+import { useAudioQueue, SKIP_SECONDS } from '../contexts/AudioQueueContext'
 import { useTheme } from '../lib/theme'
 import PlayerBar from './PlayerBar'
 import CommandPalette from './CommandPalette'
@@ -17,10 +17,10 @@ const NAV = [
 export default function Layout() {
   const location = useLocation()
   const { theme, toggle } = useTheme()
-  const { currentTrack, isPlaying, togglePlay } = useAudioQueue()
+  const { currentTrack, isPlaying, togglePlay, skip } = useAudioQueue()
   const [paletteOpen, setPaletteOpen] = useState(false)
 
-  // Global keys: cmd-K opens search, space plays, J and L jump.
+  // Global keys: cmd-K or / opens search, space plays, arrows jump.
   useEffect(() => {
     const isTyping = (target: EventTarget | null) => {
       const el = target as HTMLElement | null
@@ -40,12 +40,18 @@ export default function Layout() {
       } else if (e.key === ' ' && currentTrack) {
         e.preventDefault()
         togglePlay()
+      } else if (e.key === 'ArrowLeft' && currentTrack) {
+        e.preventDefault()
+        skip(-SKIP_SECONDS)
+      } else if (e.key === 'ArrowRight' && currentTrack) {
+        e.preventDefault()
+        skip(SKIP_SECONDS)
       }
     }
 
     window.addEventListener('keydown', onKey)
     return () => window.removeEventListener('keydown', onKey)
-  }, [currentTrack, togglePlay])
+  }, [currentTrack, togglePlay, skip])
 
   useEffect(() => {
     window.scrollTo({ top: 0, behavior: 'instant' as ScrollBehavior })
