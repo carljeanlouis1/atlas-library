@@ -4,15 +4,18 @@ import { Play, Loader2, ListPlus, Headphones } from 'lucide-react'
 import {
   fetchLibrary, LibraryItem, Bookmark, readAllBookmarks, typeLabel,
 } from '../lib/library'
-import { formatClock, monthKey, formatMonthHeading } from '../lib/format'
+import { formatClock } from '../lib/format'
+import { SORTS, sortSpec, sectionise, useSortPreference } from '../lib/sort'
 import { useAudioQueue } from '../contexts/AudioQueueContext'
 import ArchiveRow from '../components/ArchiveRow'
 import DownloadButton from '../components/DownloadButton'
+import SortMenu from '../components/SortMenu'
 
 export default function Audio() {
   const [items, setItems] = useState<LibraryItem[]>([])
   const [bookmarks, setBookmarks] = useState<Record<string, Bookmark>>({})
   const [loading, setLoading] = useState(true)
+  const [sort, chooseSort] = useSortPreference('atlas-sort-audio')
 
   const { currentTrack, isPlaying, playTrack, playAll, togglePlay, addToQueue, queue } =
     useAudioQueue()
@@ -44,16 +47,14 @@ export default function Audio() {
     [items, bookmarks]
   )
 
-  const months = useMemo(() => {
-    const groups: { key: string; heading: string; rows: LibraryItem[] }[] = []
-    for (const item of items) {
-      const key = monthKey(item.created_at)
-      const last = groups[groups.length - 1]
-      if (last && last.key === key) last.rows.push(item)
-      else groups.push({ key, heading: formatMonthHeading(item.created_at), rows: [item] })
-    }
-    return groups
-  }, [items])
+  const spec = sortSpec(sort)
+
+  const ordered = useMemo(
+    () => [...items].sort((a, b) => spec.compare(a, b, bookmarks)),
+    [items, spec, bookmarks]
+  )
+
+  const sections = useMemo(() => sectionise(ordered, spec.grouping), [ordered, spec.grouping])
 
   const toTrack = (item: LibraryItem) => ({
     id: item.id,
@@ -87,7 +88,7 @@ export default function Audio() {
         </div>
         {items.length > 0 && (
           <div className="flex gap-2">
-            <button onClick={() => playAll(items.map(toTrack))} className="btn-primary">
+            <button onClick={() => playAll(ordered.map(toTrack))} className="btn-primary">
               <Play className="h-4 w-4" />
               Play all
             </button>
@@ -152,11 +153,13 @@ export default function Audio() {
           )}
 
           <section>
-            <div className="eyebrow-rule mb-4">
-              <span className="eyebrow">Everything</span>
+            <div className="mb-4 flex items-center gap-3">
+              <span className="eyebrow flex-shrink-0">Everything</span>
+              <span className="h-px flex-1 bg-hairline" />
+              <SortMenu options={SORTS} value={sort} onChange={chooseSort} />
               <button
-                onClick={() => items.forEach((item) => addToQueue(toTrack(item)))}
-                className="eyebrow inline-flex items-center gap-1.5 hover:text-amber"
+                onClick={() => ordered.forEach((item) => addToQueue(toTrack(item)))}
+                className="eyebrow inline-flex flex-shrink-0 items-center gap-1.5 hover:text-amber"
               >
                 <ListPlus className="h-3 w-3" />
                 Queue all
@@ -164,15 +167,17 @@ export default function Audio() {
             </div>
 
             <div className="border-t border-hairline">
-              {months.map((group) => (
+              {sections.map((group) => (
                 <div key={group.key}>
-                  <div className="sticky top-14 z-10 flex items-center justify-between border-b border-hairline bg-ground px-2 py-2 sm:px-3">
-                    <span className="eyebrow">{group.heading}</span>
-                    <span className="timecode">
-                      {group.rows.length} {typeLabel('audio').toLowerCase()}
-                      {group.rows.length === 1 ? '' : 's'}
-                    </span>
-                  </div>
+                  {group.heading && (
+                    <div className="sticky top-14 z-10 flex items-center justify-between border-b border-hairline bg-ground px-2 py-2 sm:px-3">
+                      <span className="eyebrow">{group.heading}</span>
+                      <span className="timecode">
+                        {group.rows.length} {typeLabel('audio').toLowerCase()}
+                        {group.rows.length === 1 ? '' : 's'}
+                      </span>
+                    </div>
+                  )}
                   {group.rows.map((item) => (
                     <ArchiveRow
                       key={item.id}

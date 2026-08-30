@@ -5,12 +5,14 @@ import {
   fetchLibrary, LibraryItem, Bookmark, readAllBookmarks, typeLabel, runLength,
 } from '../lib/library'
 import {
-  formatFullDate, formatClock, monthKey, formatMonthHeading, dayKey, estimateReadMinutes, formatApprox,
+  formatFullDate, formatClock, dayKey, estimateReadMinutes, formatApprox,
 } from '../lib/format'
+import { SORTS, sortSpec, sectionise, useSortPreference } from '../lib/sort'
 import { useAudioQueue } from '../contexts/AudioQueueContext'
 import ArchiveDial from '../components/ArchiveDial'
 import ArchiveRow from '../components/ArchiveRow'
 import DownloadButton from '../components/DownloadButton'
+import SortMenu from '../components/SortMenu'
 
 const FILTERS: { id: string; label: string; types: string[] }[] = [
   { id: 'brief', label: 'Briefs', types: ['brief'] },
@@ -28,6 +30,7 @@ export default function Home() {
   const [filter, setFilter] = useState<string | null>(null)
   const [query, setQuery] = useState('')
   const [activeDay, setActiveDay] = useState<string | null>(null)
+  const [sort, chooseSort] = useSortPreference('atlas-sort')
 
   const { currentTrack, isPlaying, playTrack, togglePlay, addToQueue, queue } = useAudioQueue()
 
@@ -54,28 +57,25 @@ export default function Home() {
 
   const latest = items[0]
 
+  const spec = sortSpec(sort)
+
   const visible = useMemo(() => {
     const q = query.trim().toLowerCase()
     const types = FILTERS.find((f) => f.id === filter)?.types
-    return items.filter((item) => {
-      if (latest && item.id === latest.id && !filter && !q && !activeDay) return false
+    const untouched = !filter && !q && !activeDay && sort === 'newest'
+    const kept = items.filter((item) => {
+      // The newest piece already has the whole top of the page; repeating it
+      // as the first row only makes sense once the list is reordered.
+      if (latest && item.id === latest.id && untouched) return false
       if (types && !types.includes(item.type)) return false
       if (activeDay && dayKey(item.created_at) !== activeDay) return false
       if (q && !item.title.toLowerCase().includes(q)) return false
       return true
     })
-  }, [items, filter, query, activeDay, latest])
+    return kept.sort((a, b) => spec.compare(a, b, bookmarks))
+  }, [items, filter, query, activeDay, latest, spec, sort, bookmarks])
 
-  const months = useMemo(() => {
-    const groups: { key: string; heading: string; rows: LibraryItem[] }[] = []
-    for (const item of visible) {
-      const key = monthKey(item.created_at)
-      const last = groups[groups.length - 1]
-      if (last && last.key === key) last.rows.push(item)
-      else groups.push({ key, heading: formatMonthHeading(item.created_at), rows: [item] })
-    }
-    return groups
-  }, [visible])
+  const sections = useMemo(() => sectionise(visible, spec.grouping), [visible, spec.grouping])
 
   const handlePlay = (item: LibraryItem) => {
     if (!item.audio_url) return
@@ -193,9 +193,11 @@ export default function Home() {
 
       {/* Archive */}
       <section>
-        <div className="eyebrow-rule mb-4">
-          <span className="eyebrow">Archive</span>
-          <span className="timecode">
+        <div className="mb-4 flex items-center gap-3">
+          <span className="eyebrow flex-shrink-0">Archive</span>
+          <span className="h-px flex-1 bg-hairline" />
+          <SortMenu options={SORTS} value={sort} onChange={chooseSort} />
+          <span className="timecode flex-shrink-0">
             {visible.length} of {items.length}
           </span>
         </div>
@@ -244,12 +246,14 @@ export default function Home() {
           </p>
         ) : (
           <div className="border-t border-hairline">
-            {months.map((group) => (
+            {sections.map((group) => (
               <div key={group.key}>
-                <div className="sticky top-14 z-10 flex items-center justify-between border-b border-hairline bg-ground px-2 py-2 sm:px-3">
-                  <span className="eyebrow">{group.heading}</span>
-                  <span className="timecode">{group.rows.length}</span>
-                </div>
+                {group.heading && (
+                  <div className="sticky top-14 z-10 flex items-center justify-between border-b border-hairline bg-ground px-2 py-2 sm:px-3">
+                    <span className="eyebrow">{group.heading}</span>
+                    <span className="timecode">{group.rows.length}</span>
+                  </div>
+                )}
                 {group.rows.map((item) => (
                   <ArchiveRow
                     key={item.id}

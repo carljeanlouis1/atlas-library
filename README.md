@@ -8,6 +8,9 @@ device.
 
 - **Library** — the whole archive as a dated index, grouped by month, with a
   scrubbable dial across every day the archive covers
+- **Sort** — newest, oldest, title A–Z or Z–A, longest, shortest, recently
+  played, or still unfinished. Date orders group by month, title orders group
+  by letter, the rest run flat. Library and Audio each remember their own.
 - **Audio** — every recording, with a "half-listened" shelf that picks up where
   you stopped
 - **Music** — songs with artwork and lyrics
